@@ -1007,6 +1007,9 @@ function MemoApp() {
       minute: "2-digit",
     })
 
+    // Calculate content truncation before JSX
+    const contentResult = truncateAtLineBreak(memo.content)
+
     return (
       <div
         key={memo.id}
@@ -1029,6 +1032,7 @@ function MemoApp() {
               )}
               <span className="text-xs text-white/60">{time}</span>
             </div>
+
             {memo.attachments.length > 0 && (
               <div className="mb-3">
                 <div className="flex gap-2 mb-2">
@@ -1060,11 +1064,12 @@ function MemoApp() {
                 )}
               </div>
             )}
-            const contentResult = truncateAtLineBreak(memo.content)
+
             <p className="text-white text-sm leading-relaxed line-clamp-3 mb-3">
               {contentResult.text}
               {contentResult.truncated && <span className="text-white/40 font-light ml-1">...</span>}
             </p>
+
             {memo.tags.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {memo.tags.slice(0, 3).map((tag, idx) => (
@@ -1136,7 +1141,7 @@ function MemoApp() {
                         <span className="text-white/90 text-sm font-medium">{dayMemos.length}개 메모</span>
                       </div>
                       <p className="text-white/80 text-sm line-clamp-2">
-                        {truncateAtLineBreak(dayMemos[0]?.content || "메모 내용")}
+                        {truncateAtLineBreak(dayMemos[0]?.content || "메모 내용").text}
                       </p>
                     </div>
                   ) : (
@@ -1936,7 +1941,10 @@ function MemoApp() {
                             <div
                               key={attachment.id}
                               className="relative w-20 h-20 rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0"
-                              onClick={() => setImageModal({ isOpen: true, imageUrl: attachment.url })}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setImageModal({ isOpen: true, imageUrl: attachment.url })
+                              }}
                             >
                               <img
                                 src={attachment.url || "/placeholder.svg"}
@@ -1963,7 +1971,10 @@ function MemoApp() {
                             <div key={attachment.id} className="rounded-xl bg-white/10 p-3">
                               <div className="flex items-center gap-3">
                                 <button
-                                  onClick={() => playAudio(attachment.id, attachment.url)}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    playAudio(attachment.id, attachment.url)
+                                  }}
                                   className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white"
                                 >
                                   {playingAudio === attachment.id ? (

@@ -109,6 +109,14 @@ const CATEGORIES: Record<string, CategoryConfig> = {
 
 type ViewMode = "daily" | "weekly" | "monthly"
 
+// Helper function to convert Date to local YYYY-MM-DD string
+const formatLocalDate = (date: Date): string => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
 // Simple markdown renderer component
 const MarkdownRenderer: React.FC<{ content: string; isCompact?: boolean }> = ({ content, isCompact = false }) => {
   const renderMarkdown = (text: string) => {
@@ -452,7 +460,7 @@ function MemoApp() {
   }
 
   const fetchDailyData = async () => {
-    const dateStr = currentDate.toISOString().split("T")[0]
+    const dateStr = formatLocalDate(currentDate)
 
     try {
       // Fetch daily memos using /memo/list endpoint
@@ -477,8 +485,8 @@ function MemoApp() {
     const endOfWeek = new Date(startOfWeek)
     endOfWeek.setDate(startOfWeek.getDate() + 6)
 
-    const startDateStr = startOfWeek.toISOString().split("T")[0]
-    const endDateStr = endOfWeek.toISOString().split("T")[0]
+    const startDateStr = formatLocalDate(startOfWeek)
+    const endDateStr = formatLocalDate(endOfWeek)
 
     try {
       const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/list?tz=${encodeURIComponent(timeZone)}&start_date=${startDateStr}&end_date=${endDateStr}`
@@ -510,8 +518,8 @@ function MemoApp() {
     const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
 
-    const startDateStr = firstDay.toISOString().split("T")[0]
-    const endDateStr = lastDay.toISOString().split("T")[0]
+    const startDateStr = formatLocalDate(firstDay)
+    const endDateStr = formatLocalDate(lastDay)
 
     try {
       const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/list?tz=${encodeURIComponent(timeZone)}&start_date=${startDateStr}&end_date=${endDateStr}`
@@ -575,7 +583,7 @@ function MemoApp() {
     // Mock daily summary for today
     if (viewMode === "daily" && currentDate.toDateString() === new Date().toDateString()) {
       const mockSummary: DailySummary = {
-        date: currentDate.toISOString().split("T")[0],
+        date: formatLocalDate(currentDate),
         ai_comment: "오늘은 주로 학습과 아이디어 정리에 집중하신 하루였네요. 특히 React 관련 내용이 많았습니다.",
         category_summaries: [
           {
@@ -1137,7 +1145,7 @@ function MemoApp() {
     return (
       <div className="space-y-4">
         {weekDays.map((day, index) => {
-          const dateStr = day.toISOString().split("T")[0]
+          const dateStr = formatLocalDate(day)
           const dayName = day.toLocaleDateString(locale, { weekday: "short" })
           const dayNumber = day.getDate()
           const dayMemos = weeklyData[dateStr] || []
@@ -1306,7 +1314,7 @@ function MemoApp() {
             {weekRows.map((week, weekIndex) => (
               <div key={weekIndex} className="grid grid-cols-7 gap-1">
                 {week.map((day, dayIndex) => {
-                  const dateStr = day.toISOString().split("T")[0]
+                  const dateStr = formatLocalDate(day)
                   const dayData = monthlyData[dateStr]
                   const isCurrentMonth = day.getMonth() === month
                   const isToday = day.toDateString() === new Date().toDateString()
@@ -2028,38 +2036,28 @@ function MemoApp() {
                     </div>
                     <div className="text-white/60 text-xs text-right space-y-0.5">
                       <p>
-                        작성일:{' '}
-                        {(() => {
-                          const dt = selectedMemo.created_at.endsWith('Z')
-                            ? new Date(selectedMemo.created_at)
-                            : new Date(selectedMemo.created_at + 'Z');
-                          return dt.toLocaleString(locale, {
-                            timeZone,
-                            year: 'numeric',
-                            month: '2-digit',
-                            day: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            second: '2-digit',
-                          });
-                        })()}
+                        작성일:{" "}
+                        {new Date(selectedMemo.created_at).toLocaleString(locale, {
+                          timeZone,
+                          year: "numeric",
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
                       </p>
                       <p>
-                        수정일:{' '}
-                        {(() => {
-                          const dt = selectedMemo.updated_at.endsWith('Z')
-                            ? new Date(selectedMemo.updated_at)
-                            : new Date(selectedMemo.updated_at + 'Z');
-                          return dt.toLocaleString(locale, {
-                            timeZone,
-                            year: 'numeric',
-                            month: '2-digit',
-                            day: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            second: '2-digit',
-                          });
-                        })()}
+                        수정일:{" "}
+                        {new Date(selectedMemo.updated_at).toLocaleString(locale, {
+                          timeZone,
+                          year: "numeric",
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
                       </p>
                     </div>
                   </div>

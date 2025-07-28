@@ -19,6 +19,8 @@ import {
   User,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Sparkles,
   BarChart3,
   Grid3X3,
@@ -108,7 +110,7 @@ const CATEGORIES: Record<string, CategoryConfig> = {
 type ViewMode = "daily" | "weekly" | "monthly"
 
 // Simple markdown renderer component
-const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
+const MarkdownRenderer: React.FC<{ content: string; isCompact?: boolean }> = ({ content, isCompact = false }) => {
   const renderMarkdown = (text: string) => {
     // Split by lines to preserve line breaks
     const lines = text.split("\n")
@@ -117,21 +119,30 @@ const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
       // Handle headers
       if (line.startsWith("### ")) {
         return (
-          <h3 key={index} className="text-lg font-semibold text-white mb-2 mt-4">
+          <h3
+            key={index}
+            className={`font-semibold text-white mb-2 ${isCompact ? 'text-base' : 'text-lg'}`}
+          >
             {line.slice(4)}
           </h3>
         )
       }
       if (line.startsWith("## ")) {
         return (
-          <h2 key={index} className="text-xl font-semibold text-white mb-2 mt-4">
+          <h2
+            key={index}
+            className={`font-semibold text-white mb-2 mt-4 ${isCompact ? 'text-lg' : 'text-xl'}`}
+          >
             {line.slice(3)}
           </h2>
         )
       }
       if (line.startsWith("# ")) {
         return (
-          <h1 key={index} className="text-2xl font-bold text-white mb-3 mt-4">
+          <h1
+            key={index}
+            className={`font-bold text-white mb-3 mt-4 ${isCompact ? 'text-xl' : 'text-2xl'}`}
+          >
             {line.slice(2)}
           </h1>
         )
@@ -161,7 +172,7 @@ const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
           <div key={index} className="flex items-start gap-2 mb-1">
             <span className="text-white/70 mt-1">•</span>
             <span
-              className="text-white leading-relaxed flex-1"
+              className={`text-white leading-relaxed flex-1 ${isCompact ? 'text-sm' : 'text-base'}`}
               dangerouslySetInnerHTML={{ __html: processedLine.slice(2) }}
             />
           </div>
@@ -175,7 +186,7 @@ const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
           <div key={index} className="flex items-start gap-2 mb-1">
             <span className="text-white/70 mt-1">{numberedMatch[1]}.</span>
             <span
-              className="text-white leading-relaxed flex-1"
+              className={`text-white leading-relaxed flex-1 ${isCompact ? 'text-sm' : 'text-base'}`}
               dangerouslySetInnerHTML={{ __html: numberedMatch[2] }}
             />
           </div>
@@ -191,7 +202,7 @@ const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
       return (
         <p
           key={index}
-          className="text-white leading-relaxed mb-2"
+          className={`text-white leading-relaxed mb-2 ${isCompact ? 'text-sm' : 'text-base'}`}
           dangerouslySetInnerHTML={{ __html: processedLine }}
         />
       )
@@ -214,7 +225,7 @@ const ImageModal: React.FC<{
       className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60]"
       onClick={onClose}
     >
-      <div className="relative max-w-[90vw] max-h-[90vh] p-4">
+      <div className="relative max-w-[66vw] max-h-[66vh] p-4">
         <button
           onClick={onClose}
           className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-white/20 text-white flex items-center justify-center hover:bg-white/30 transition-all z-10"
@@ -233,6 +244,13 @@ const ImageModal: React.FC<{
 }
 
 function MemoApp() {
+  // Preview expansion state for memo cards
+  const [expandedPreviews, setExpandedPreviews] = useState<string[]>([]);
+  const toggleExpand = (id: string) => {
+    setExpandedPreviews(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
   const [memos, setMemos] = useState<Memo[]>([])
   const [dailySummary, setDailySummary] = useState<DailySummary | null>(null)
   const [timeZone, setTimeZone] = useState<string>("")
@@ -1007,10 +1025,12 @@ function MemoApp() {
       minute: "2-digit",
     })
 
-    // Calculate content truncation before JSX
-    const contentResult = truncateAtLineBreak(memo.content)
     const imageAttachments = memo.attachments.filter((att) => att.type === "image")
     const audioAttachments = memo.attachments.filter((att) => att.type === "audio")
+
+    const { text: previewText, truncated } = truncateAtLineBreak(memo.content);
+    const isExpanded = expandedPreviews.includes(memo.id);
+    const preview = isExpanded || !truncated ? memo.content : previewText;
 
     return (
       <div
@@ -1039,10 +1059,19 @@ function MemoApp() {
 
         {/* Content */}
         <div className="mb-4">
-          <p className="text-white text-base leading-relaxed">
-            {contentResult.text}
-            {contentResult.truncated && <span className="text-white/40 font-light ml-1">...</span>}
-          </p>
+          <MarkdownRenderer content={preview} isCompact />
+          {truncated && (
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleExpand(memo.id); }}
+              className="mt-1 w-6 h-6 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all"
+            >
+              {isExpanded ? (
+                <ChevronUp className="w-4 h-4 text-blue-300" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-blue-300" />
+              )}
+            </button>
+          )}
         </div>
 
         {/* Images - Horizontal scroll layout */}
@@ -1123,6 +1152,13 @@ function MemoApp() {
             categoryGroups[category] = (categoryGroups[category] || 0) + 1
           })
 
+          // Find daily summary for this date
+          // Use dailySummary only if its date matches
+          let summaryForDay = null
+          if (dailySummary && dailySummary.date === dateStr) {
+            summaryForDay = dailySummary
+          }
+
           return (
             <div
               key={index}
@@ -1135,45 +1171,43 @@ function MemoApp() {
                 setCurrentDate(day)
               }}
             >
-              <div className="flex items-center gap-4 mb-3">
-                <div className="text-center">
+              <div className="flex items-center justify-between my-2">
+                {/* Date block */}
+                <div className="flex flex-col justify-center items-center mr-6">
                   <div className="text-white/80 text-xs font-medium">{dayName}</div>
                   <div className="text-white text-lg font-bold">{dayNumber}</div>
                 </div>
+                {/* Summary and category counts */}
                 <div className="flex-1">
                   {dayMemos.length > 0 ? (
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-white/90 text-sm font-medium">{dayMemos.length}개 메모</span>
-                      </div>
-                      <p className="text-white/80 text-sm line-clamp-2">
-                        {truncateAtLineBreak(dayMemos[0]?.content || "메모 내용").text}
-                      </p>
-                    </div>
+                    summaryForDay ? (
+                      <p className="text-white/80 text-sm">{summaryForDay.ai_comment}</p>
+                    ) : (
+                      <p className="text-white/80 text-sm">요약 생성 중...</p>
+                    )
                   ) : (
                     <div className="text-white/60 text-sm">메모가 없습니다</div>
                   )}
+                  {Object.keys(categoryGroups).length > 0 && (
+                    <div className="flex gap-2 flex-wrap mt-4">
+                      {Object.entries(categoryGroups).map(([categoryKey, count]) => {
+                        const category = categories[categoryKey] || CATEGORIES.uncategorized
+                        return (
+                          <div key={categoryKey} className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/10">
+                            <div
+                              className="w-3 h-3 rounded-full flex items-center justify-center"
+                              style={{ backgroundColor: category.color }}
+                            >
+                              <div className="w-1.5 h-1.5 rounded-full bg-white/80" />
+                            </div>
+                            <span className="text-xs text-white/70">{count}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
-
-              {Object.keys(categoryGroups).length > 0 && (
-                <div className="flex gap-2 flex-wrap">
-                  {Object.entries(categoryGroups).map(([categoryKey, count]) => {
-                    const category = categories[categoryKey] || CATEGORIES.uncategorized
-                    return (
-                      <div key={categoryKey} className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/10">
-                        <div
-                          className="w-3 h-3 rounded-full flex items-center justify-center"
-                          style={{ backgroundColor: category.color }}
-                        >
-                          <div className="w-1.5 h-1.5 rounded-full bg-white/80" />
-                        </div>
-                        <span className="text-xs text-white/70">{count}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
             </div>
           )
         })}
@@ -1562,15 +1596,16 @@ function MemoApp() {
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end z-50">
             <div className="w-full max-w-md mx-auto backdrop-blur-xl bg-white/10 border-t border-white/20 rounded-t-3xl p-6 max-h-[80vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-white">새 메모</h3>
+                <h3 className="text-lg font-medium text-white/70">새 메모</h3>
                 <button onClick={resetInputState} className="text-white/70">
                   <X className="w-5 h-5" />
                 </button>
               </div>
+              <hr className="border-t border-white/20 mb-4" />
 
               <textarea
-                className="w-full p-4 rounded-xl backdrop-blur-md bg-white/10 border border-white/20 text-white placeholder-white/60 resize-none mb-4"
-                rows={4}
+                className="w-full p-4 rounded-xl backdrop-blur-md bg-white/10 border border-white/20 text-white placeholder-white/60 resize-y mb-4 max-h-[40vh] overflow-y-auto"
+                rows={10}
                 placeholder="메모를 입력하세요..."
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
@@ -1691,17 +1726,31 @@ function MemoApp() {
 
         {/* Detail Modal */}
         {selectedMemo && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end z-50">
-            <div className="w-full max-w-md mx-auto backdrop-blur-xl bg-white/10 border-t border-white/20 rounded-t-3xl p-6 max-h-[90vh] overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end z-50"
+            onClick={resetDetailState}
+          >
+            <div
+              className="w-full max-w-md mx-auto backdrop-blur-xl bg-white/10 border-t border-white/20 rounded-t-3xl p-6 max-h-[90vh] overflow-y-auto"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Detail/Edit Header */}
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-white">{isEditing ? "메모 수정" : "메모 상세"}</h3>
-                <button onClick={resetDetailState} className="text-white/70">
+                <h3 className="text-lg font-medium text-white/70">
+                  {isEditing ? "메모 수정" : "메모 상세"}
+                </h3>
+                <button
+                  onClick={resetDetailState}
+                  className="text-white/70 p-1 rounded-full hover:bg-white/10 transition"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
+              <hr className="border-t border-white/20 mb-4" />
 
-              {isEditing ? (
                 <>
+                  {isEditing ? (
+                    <>
                   <textarea
                     className="w-full p-4 rounded-xl backdrop-blur-md bg-white/10 border border-white/20 text-white placeholder-white/60 resize-none mb-4"
                     rows={4}
@@ -1889,131 +1938,145 @@ function MemoApp() {
                       삭제
                     </button>
                   </div>
-                </>
-              ) : (
-                <>
-                  {/* Category */}
-                  {selectedMemo.category && (
-                    <div className="flex items-center gap-3 mb-4">
-                      {(() => {
-                        const category =
-                          categories[selectedMemo.category || "uncategorized"] || CATEGORIES.uncategorized
-                        return (
-                          <>
-                            <div
-                              className={`w-10 h-10 rounded-full ${category.bgColor} flex items-center justify-center flex-shrink-0`}
-                              style={{ color: category.color }}
-                            >
-                              {category.icon}
-                            </div>
-                            <div>
-                              <h4 className="text-white font-medium">{category.name}</h4>
-                              {selectedMemo.category_confidence && (
-                                <p className="text-white/60 text-sm">
-                                  정확도: {Math.round(selectedMemo.category_confidence * 100)}%
-                                </p>
-                              )}
-                            </div>
-                          </>
-                        )
-                      })()}
-                    </div>
-                  )}
-
-                  {/* Content with Markdown Support */}
-                  <div className="mb-6">
-                    <MarkdownRenderer content={selectedMemo.content} />
-                  </div>
-
-                  {/* Tags */}
-                  {selectedMemo.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-6">
-                      {selectedMemo.tags.map((tag, idx) => (
-                        <span key={idx} className="text-sm px-3 py-1 rounded-full bg-white/20 text-white">
-                          #{tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Images Section */}
-                  {selectedMemo.attachments.filter((att) => att.type === "image").length > 0 && (
-                    <div className="mb-6">
-                      <h4 className="text-white font-medium mb-3">이미지</h4>
-                      <div className="flex gap-2 overflow-x-auto pb-2">
-                        {selectedMemo.attachments
-                          .filter((att) => att.type === "image")
-                          .map((attachment) => (
-                            <div
-                              key={attachment.id}
-                              className="relative w-20 h-20 rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setImageModal({ isOpen: true, imageUrl: attachment.url })
-                              }}
-                            >
-                              <img
-                                src={attachment.url || "/placeholder.svg"}
-                                alt={attachment.filename}
-                                className="w-full h-full object-cover"
-                              />
-                              <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/50 transition-opacity">
-                                <ZoomIn className="w-5 h-5 text-white" />
-                              </div>
-                            </div>
-                          ))}
+                    </>
+                  ) : (
+                    <>
+                      {/* Content with Markdown Support */}
+                      <div className="mb-6">
+                        <MarkdownRenderer content={selectedMemo.content} />
                       </div>
-                    </div>
-                  )}
 
-                  {/* Audio Section */}
-                  {selectedMemo.attachments.filter((att) => att.type === "audio").length > 0 && (
-                    <div className="mb-6">
-                      <h4 className="text-white font-medium mb-3">음성 메모</h4>
-                      <div className="space-y-2">
-                        {selectedMemo.attachments
-                          .filter((att) => att.type === "audio")
-                          .map((attachment) => (
-                            <div key={attachment.id} className="rounded-xl bg-white/10 p-3">
-                              <div className="flex items-center gap-3">
-                                <button
+                      {/* Tags */}
+                      {selectedMemo.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-6">
+                          {selectedMemo.tags.map((tag, idx) => (
+                            <span key={idx} className="text-sm px-3 py-1 rounded-full bg-white/20 text-white">
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Images Section */}
+                      {selectedMemo.attachments.filter((att) => att.type === "image").length > 0 && (
+                        <div className="mb-6">
+                          <h4 className="text-white font-medium mb-3">이미지</h4>
+                          <div className="flex gap-2 overflow-x-auto pb-2">
+                            {selectedMemo.attachments
+                              .filter((att) => att.type === "image")
+                              .map((attachment) => (
+                                <div
+                                  key={attachment.id}
+                                  className="relative w-20 h-20 rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0"
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    playAudio(attachment.id, attachment.url)
+                                    setImageModal({ isOpen: true, imageUrl: attachment.url })
                                   }}
-                                  className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white"
                                 >
-                                  {playingAudio === attachment.id ? (
-                                    <Pause className="w-5 h-5" />
-                                  ) : (
-                                    <Play className="w-5 h-5" />
-                                  )}
-                                </button>
-                                <span className="text-white text-sm">{attachment.filename}</span>
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  )}
+                                  <img
+                                    src={attachment.url || "/placeholder.svg"}
+                                    alt={attachment.filename}
+                                    className="w-full h-full object-cover"
+                                  />
+                                  <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/50 transition-opacity">
+                                    <ZoomIn className="w-5 h-5 text-white" />
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                      )}
 
-                  {/* Edit Button */}
-                  <button
-                    onClick={() => {
-                      setIsEditing(true)
-                      setEditText(selectedMemo.content)
-                      setEditTags(selectedMemo.tags)
-                      setEditAttachments({
-                        existing: selectedMemo.attachments,
-                        newImages: [],
-                        newAudios: [],
-                      })
-                    }}
-                    className="w-full py-3 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/15 transition-all flex items-center justify-center gap-2"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                    메모 수정
-                  </button>
+                      {/* Audio Section */}
+                      {selectedMemo.attachments.filter((att) => att.type === "audio").length > 0 && (
+                        <div className="mb-6">
+                          <h4 className="text-white font-medium mb-3">음성 메모</h4>
+                          <div>
+                            {selectedMemo.attachments
+                              .filter((att) => att.type === "audio")
+                              .map((attachment) => (
+                                <div key={attachment.id} className="mb-4">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); playAudio(attachment.id, attachment.url); }}
+                                    className="w-full flex items-center justify-center gap-2 px-5 py-4 rounded-2xl bg-white/10 hover:bg-white/20 transition-all"
+                                  >
+                                    {playingAudio === attachment.id ? (
+                                      <Pause className="w-6 h-6 text-white" />
+                                    ) : (
+                                      <Play className="w-6 h-6 text-white" />
+                                    )}
+                                  </button>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Category & Dates just above edit button */}
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          {selectedMemo.category && (() => {
+                            const cat = categories[selectedMemo.category] || CATEGORIES.uncategorized;
+                            return (
+                              <>
+                                <div
+                                  className={`w-8 h-8 rounded-full ${cat.bgColor} flex items-center justify-center`}
+                                  style={{ color: cat.color }}
+                                >
+                                  {cat.icon}
+                                </div>
+                                <span className="text-white font-medium">{cat.name}</span>
+                              </>
+                            );
+                          })()}
+                        </div>
+                        <div className="text-white/60 text-xs text-right space-y-0.5">
+                          <p>
+                            작성일:{" "}
+                            {new Date(selectedMemo.created_at).toLocaleString(locale, {
+                              timeZone,
+                              year: "numeric",
+                              month: "2-digit",
+                              day: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit",
+                            })}
+                          </p>
+                          <p>
+                            수정일:{" "}
+                            {new Date(selectedMemo.updated_at).toLocaleString(locale, {
+                              timeZone,
+                              year: "numeric",
+                              month: "2-digit",
+                              day: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit",
+                            })}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Edit Button */}
+                      <button
+                        onClick={() => {
+                          setIsEditing(true)
+                          setEditText(selectedMemo.content)
+                          setEditTags(selectedMemo.tags)
+                          setEditAttachments({
+                            existing: selectedMemo.attachments,
+                            newImages: [],
+                            newAudios: [],
+                          })
+                        }}
+                        className="w-full py-3 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/15 transition-all flex items-center justify-center gap-2"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                        메모 수정
+                      </button>
+                    </>
+                  )}
                 </>
               )}
             </div>

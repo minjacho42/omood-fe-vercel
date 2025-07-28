@@ -28,6 +28,7 @@ import {
   Pause,
   Play,
   Trash2,
+  ZoomIn,
 } from "lucide-react"
 import AuthGuard from "@/components/auth-guard"
 import CategoryManagement from "@/components/category-management"
@@ -106,6 +107,131 @@ const CATEGORIES: Record<string, CategoryConfig> = {
 
 type ViewMode = "daily" | "weekly" | "monthly"
 
+// Simple markdown renderer component
+const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
+  const renderMarkdown = (text: string) => {
+    // Split by lines to preserve line breaks
+    const lines = text.split("\n")
+
+    return lines.map((line, index) => {
+      // Handle headers
+      if (line.startsWith("### ")) {
+        return (
+          <h3 key={index} className="text-lg font-semibold text-white mb-2 mt-4">
+            {line.slice(4)}
+          </h3>
+        )
+      }
+      if (line.startsWith("## ")) {
+        return (
+          <h2 key={index} className="text-xl font-semibold text-white mb-2 mt-4">
+            {line.slice(3)}
+          </h2>
+        )
+      }
+      if (line.startsWith("# ")) {
+        return (
+          <h1 key={index} className="text-2xl font-bold text-white mb-3 mt-4">
+            {line.slice(2)}
+          </h1>
+        )
+      }
+
+      // Handle bold text
+      let processedLine = line.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
+
+      // Handle italic text
+      processedLine = processedLine.replace(/\*(.*?)\*/g, '<em class="italic text-white/90">$1</em>')
+
+      // Handle inline code
+      processedLine = processedLine.replace(
+        /`(.*?)`/g,
+        '<code class="bg-white/20 px-1 py-0.5 rounded text-sm font-mono text-white">$1</code>',
+      )
+
+      // Handle links
+      processedLine = processedLine.replace(
+        /\[([^\]]+)\]$$([^)]+)$$/g,
+        '<a href="$2" class="text-blue-400 underline hover:text-blue-300" target="_blank" rel="noopener noreferrer">$1</a>',
+      )
+
+      // Handle bullet points
+      if (line.startsWith("- ") || line.startsWith("* ")) {
+        return (
+          <div key={index} className="flex items-start gap-2 mb-1">
+            <span className="text-white/70 mt-1">•</span>
+            <span
+              className="text-white leading-relaxed flex-1"
+              dangerouslySetInnerHTML={{ __html: processedLine.slice(2) }}
+            />
+          </div>
+        )
+      }
+
+      // Handle numbered lists
+      const numberedMatch = line.match(/^(\d+)\.\s(.*)/)
+      if (numberedMatch) {
+        return (
+          <div key={index} className="flex items-start gap-2 mb-1">
+            <span className="text-white/70 mt-1">{numberedMatch[1]}.</span>
+            <span
+              className="text-white leading-relaxed flex-1"
+              dangerouslySetInnerHTML={{ __html: numberedMatch[2] }}
+            />
+          </div>
+        )
+      }
+
+      // Handle empty lines
+      if (line.trim() === "") {
+        return <br key={index} />
+      }
+
+      // Regular paragraph
+      return (
+        <p
+          key={index}
+          className="text-white leading-relaxed mb-2"
+          dangerouslySetInnerHTML={{ __html: processedLine }}
+        />
+      )
+    })
+  }
+
+  return <div className="space-y-1">{renderMarkdown(content)}</div>
+}
+
+// Image modal component
+const ImageModal: React.FC<{
+  isOpen: boolean
+  imageUrl: string
+  onClose: () => void
+}> = ({ isOpen, imageUrl, onClose }) => {
+  if (!isOpen) return null
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60]"
+      onClick={onClose}
+    >
+      <div className="relative max-w-[90vw] max-h-[90vh] p-4">
+        <button
+          onClick={onClose}
+          className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-white/20 text-white flex items-center justify-center hover:bg-white/30 transition-all z-10"
+        >
+          <X className="w-4 h-4" />
+        </button>
+        <img
+          src={imageUrl || "/placeholder.svg"}
+          alt="Full size"
+          className="max-w-full max-h-full object-contain rounded-lg"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    </div>
+  )
+}
+
 function MemoApp() {
   const [memos, setMemos] = useState<Memo[]>([])
   const [dailySummary, setDailySummary] = useState<DailySummary | null>(null)
@@ -144,6 +270,12 @@ function MemoApp() {
     newImages: File[]
     newAudios: Blob[]
   }>({ existing: [], newImages: [], newAudios: [] })
+
+  // Image modal state
+  const [imageModal, setImageModal] = useState<{
+    isOpen: boolean
+    imageUrl: string
+  }>({ isOpen: false, imageUrl: "" })
 
   // Category management states
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>([])
@@ -413,7 +545,8 @@ function MemoApp() {
       {
         id: "1",
         user_id: "user1",
-        content: "React 18의 새로운 Concurrent Features에 대해 공부했다.",
+        content:
+          "React 18의 새로운 Concurrent Features에 대해 공부했다.\n\n## 주요 특징\n- **Suspense**: 데이터 로딩 상태 관리\n- **Concurrent Rendering**: 우선순위 기반 렌더링\n- `useTransition` 훅으로 상태 업데이트 최적화\n\n정말 흥미로운 기능들이다!",
         attachments: [],
         tags: ["react", "study"],
         created_at: new Date().toISOString(),
@@ -762,6 +895,15 @@ function MemoApp() {
     }
   }
 
+  // Helper function to truncate content at first line break
+  const truncateAtLineBreak = (content: string, maxLength = 100) => {
+    const firstLineBreak = content.indexOf("\n")
+    if (firstLineBreak !== -1 && firstLineBreak < maxLength) {
+      return content.substring(0, firstLineBreak) + "..."
+    }
+    return content.length > maxLength ? content.substring(0, maxLength) + "..." : content
+  }
+
   const renderDailySummary = () => {
     // Case 1: No memos for the day
     if (memos.length === 0) {
@@ -917,7 +1059,7 @@ function MemoApp() {
               </div>
             )}
 
-            <p className="text-white text-sm leading-relaxed line-clamp-3 mb-3">{memo.content}</p>
+            <p className="text-white text-sm leading-relaxed line-clamp-3 mb-3">{truncateAtLineBreak(memo.content)}</p>
 
             {memo.tags.length > 0 && (
               <div className="flex flex-wrap gap-1">
@@ -989,7 +1131,9 @@ function MemoApp() {
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-white/90 text-sm font-medium">{dayMemos.length}개 메모</span>
                       </div>
-                      <p className="text-white/80 text-sm line-clamp-2">{dayMemos[0]?.content || "메모 내용"}</p>
+                      <p className="text-white/80 text-sm line-clamp-2">
+                        {truncateAtLineBreak(dayMemos[0]?.content || "메모 내용")}
+                      </p>
                     </div>
                   ) : (
                     <div className="text-white/60 text-sm">메모가 없습니다</div>
@@ -1761,45 +1905,10 @@ function MemoApp() {
                     </div>
                   )}
 
-                  {/* Content */}
-                  <p className="text-white text-base leading-relaxed mb-4">{selectedMemo.content}</p>
-
-                  {/* Attachments */}
-                  {selectedMemo.attachments.length > 0 && (
-                    <div className="mb-4">
-                      {selectedMemo.attachments
-                        .filter((att) => att.type === "image")
-                        .map((attachment) => (
-                          <div key={attachment.id} className="rounded-xl overflow-hidden mb-2">
-                            <img
-                              src={attachment.url || "/placeholder.svg"}
-                              alt={attachment.filename}
-                              className="w-full max-h-64 object-cover"
-                            />
-                          </div>
-                        ))}
-
-                      {selectedMemo.attachments
-                        .filter((att) => att.type === "audio")
-                        .map((attachment) => (
-                          <div key={attachment.id} className="rounded-xl bg-white/10 p-3 mb-2">
-                            <div className="flex items-center gap-3">
-                              <button
-                                onClick={() => playAudio(attachment.id, attachment.url)}
-                                className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white"
-                              >
-                                {playingAudio === attachment.id ? (
-                                  <Pause className="w-5 h-5" />
-                                ) : (
-                                  <Play className="w-5 h-5" />
-                                )}
-                              </button>
-                              <span className="text-white text-sm">{attachment.filename}</span>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  )}
+                  {/* Content with Markdown Support */}
+                  <div className="mb-6">
+                    <MarkdownRenderer content={selectedMemo.content} />
+                  </div>
 
                   {/* Tags */}
                   {selectedMemo.tags.length > 0 && (
@@ -1809,6 +1918,61 @@ function MemoApp() {
                           #{tag}
                         </span>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Images Section */}
+                  {selectedMemo.attachments.filter((att) => att.type === "image").length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="text-white font-medium mb-3">이미지</h4>
+                      <div className="max-h-64 overflow-y-auto space-y-2">
+                        {selectedMemo.attachments
+                          .filter((att) => att.type === "image")
+                          .map((attachment) => (
+                            <div
+                              key={attachment.id}
+                              className="w-20 h-20 rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                              onClick={() => setImageModal({ isOpen: true, imageUrl: attachment.url })}
+                            >
+                              <img
+                                src={attachment.url || "/placeholder.svg"}
+                                alt={attachment.filename}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/50 transition-opacity">
+                                <ZoomIn className="w-5 h-5 text-white" />
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Audio Section */}
+                  {selectedMemo.attachments.filter((att) => att.type === "audio").length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="text-white font-medium mb-3">음성 메모</h4>
+                      <div className="space-y-2">
+                        {selectedMemo.attachments
+                          .filter((att) => att.type === "audio")
+                          .map((attachment) => (
+                            <div key={attachment.id} className="rounded-xl bg-white/10 p-3">
+                              <div className="flex items-center gap-3">
+                                <button
+                                  onClick={() => playAudio(attachment.id, attachment.url)}
+                                  className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white"
+                                >
+                                  {playingAudio === attachment.id ? (
+                                    <Pause className="w-5 h-5" />
+                                  ) : (
+                                    <Play className="w-5 h-5" />
+                                  )}
+                                </button>
+                                <span className="text-white text-sm">{attachment.filename}</span>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
                     </div>
                   )}
 
@@ -1834,6 +1998,13 @@ function MemoApp() {
             </div>
           </div>
         )}
+
+        {/* Image Modal */}
+        <ImageModal
+          isOpen={imageModal.isOpen}
+          imageUrl={imageModal.imageUrl}
+          onClose={() => setImageModal({ isOpen: false, imageUrl: "" })}
+        />
 
         {/* Image Options Modal */}
         {showImageOptions && (

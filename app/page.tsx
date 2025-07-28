@@ -1605,6 +1605,66 @@ function MemoApp() {
                     </div>
                   )}
 
+                  {/* New Attachments Preview */}
+                  {(editAttachments.newImages.length > 0 || editAttachments.newAudios.length > 0) && (
+                    <div className="mb-4">
+                      <h4 className="text-white font-medium mb-2">새로 추가된 첨부파일</h4>
+
+                      {/* New Image Previews */}
+                      {editAttachments.newImages.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {editAttachments.newImages.map((file, index) => (
+                            <div key={index} className="relative w-24 h-24 rounded-lg overflow-hidden">
+                              <img
+                                src={URL.createObjectURL(file) || "/placeholder.svg"}
+                                alt={file.name}
+                                className="w-full h-full object-cover"
+                              />
+                              <button
+                                onClick={() => {
+                                  setEditAttachments((prev) => ({
+                                    ...prev,
+                                    newImages: prev.newImages.filter((_, i) => i !== index),
+                                  }))
+                                }}
+                                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-all"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* New Audio Previews */}
+                      {editAttachments.newAudios.length > 0 && (
+                        <div className="space-y-2">
+                          {editAttachments.newAudios.map((blob, index) => (
+                            <div key={index} className="rounded-xl bg-white/10 p-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 flex items-center justify-center text-white">
+                                  <Mic className="w-5 h-5" />
+                                </div>
+                                <span className="text-white text-sm flex-1">새 음성 메모 {index + 1}</span>
+                                <button
+                                  onClick={() => {
+                                    setEditAttachments((prev) => ({
+                                      ...prev,
+                                      newAudios: prev.newAudios.filter((_, i) => i !== index),
+                                    }))
+                                  }}
+                                  className="text-white/50 hover:text-white transition-all"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* New Attachments */}
                   <div className="flex gap-3 mb-4">
                     <button
@@ -1615,7 +1675,9 @@ function MemoApp() {
                       <span className="text-sm">사진 추가</span>
                     </button>
                     <button
-                      onClick={isRecording ? stopRecording : startRecording}
+                      onClick={
+                        isRecording ? stopRecording : isEditing && selectedMemo ? startEditRecording : startRecording
+                      }
                       className={`flex-1 py-3 rounded-xl border text-white hover:bg-white/15 transition-all flex items-center justify-center gap-2 ${
                         isRecording ? "bg-red-500/20 border-red-500/30" : "bg-white/10 border-white/20"
                       }`}
@@ -1753,7 +1815,11 @@ function MemoApp() {
               <div className="flex gap-4">
                 <button
                   onClick={() => {
-                    fileInputRef.current?.click()
+                    if (isEditing && selectedMemo) {
+                      editFileInputRef.current?.click()
+                    } else {
+                      fileInputRef.current?.click()
+                    }
                     setShowImageOptions(false)
                   }}
                   className="flex-1 py-3 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/15 transition-all"
@@ -1762,7 +1828,12 @@ function MemoApp() {
                 </button>
                 <button
                   onClick={() => {
-                    cameraInputRef.current?.click()
+                    if (isEditing && selectedMemo) {
+                      // For edit mode, we'll use the same camera input but handle differently
+                      cameraInputRef.current?.click()
+                    } else {
+                      cameraInputRef.current?.click()
+                    }
                     setShowImageOptions(false)
                   }}
                   className="flex-1 py-3 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/15 transition-all"
@@ -1804,7 +1875,22 @@ function MemoApp() {
           multiple
           ref={cameraInputRef}
           className="hidden"
-          onChange={(e) => addImages(e.target.files)}
+          onChange={(e) => {
+            if (isEditing && selectedMemo) {
+              addEditImages(e.target.files)
+            } else {
+              addImages(e.target.files)
+            }
+          }}
+        />
+
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          ref={editFileInputRef}
+          className="hidden"
+          onChange={(e) => addEditImages(e.target.files)}
         />
       </div>
     </div>
@@ -1817,4 +1903,44 @@ export default function HomePage() {
       <MemoApp />
     </AuthGuard>
   )
+}
+
+const startEditRecording = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const mediaRecorder = new MediaRecorder(stream)
+    mediaRecorderRef.current = mediaRecorder
+
+    const chunks: Blob[] = []
+    mediaRecorder.ondataavailable = (e) => chunks.push(e.data)
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(chunks, { type: "audio/webm" })
+      setEditAttachments((prev) => ({
+        ...prev,
+        newAudios: [...prev.newAudios, blob],
+      }))
+      stream.getTracks().forEach((track) => track.stop())
+    }
+
+    mediaRecorder.start()
+    setIsRecording(true)
+  } catch (error) {
+    console.error("Recording failed:", error)
+  }
+}
+
+const addEditImages = (files: FileList | null) => {
+  if (!files) return
+
+  const validImages = Array.from(files).filter((file) => {
+    if (!file.type.startsWith("image/")) return false
+    if (file.size > 10 * 1024 * 1024) return false
+    return true
+  })
+
+  setEditAttachments((prev) => ({
+    ...prev,
+    newImages: [...prev.newImages, ...validImages],
+  }))
+  setShowImageOptions(false)
 }

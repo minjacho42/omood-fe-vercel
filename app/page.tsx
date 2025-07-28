@@ -119,30 +119,21 @@ const MarkdownRenderer: React.FC<{ content: string; isCompact?: boolean }> = ({ 
       // Handle headers
       if (line.startsWith("### ")) {
         return (
-          <h3
-            key={index}
-            className={`font-semibold text-white mb-2 ${isCompact ? 'text-base' : 'text-lg'}`}
-          >
+          <h3 key={index} className={`font-semibold text-white mb-2 ${isCompact ? "text-base" : "text-lg"}`}>
             {line.slice(4)}
           </h3>
         )
       }
       if (line.startsWith("## ")) {
         return (
-          <h2
-            key={index}
-            className={`font-semibold text-white mb-2 mt-4 ${isCompact ? 'text-lg' : 'text-xl'}`}
-          >
+          <h2 key={index} className={`font-semibold text-white mb-2 mt-4 ${isCompact ? "text-lg" : "text-xl"}`}>
             {line.slice(3)}
           </h2>
         )
       }
       if (line.startsWith("# ")) {
         return (
-          <h1
-            key={index}
-            className={`font-bold text-white mb-3 mt-4 ${isCompact ? 'text-xl' : 'text-2xl'}`}
-          >
+          <h1 key={index} className={`font-bold text-white mb-3 mt-4 ${isCompact ? "text-xl" : "text-2xl"}`}>
             {line.slice(2)}
           </h1>
         )
@@ -172,7 +163,7 @@ const MarkdownRenderer: React.FC<{ content: string; isCompact?: boolean }> = ({ 
           <div key={index} className="flex items-start gap-2 mb-1">
             <span className="text-white/70 mt-1">•</span>
             <span
-              className={`text-white leading-relaxed flex-1 ${isCompact ? 'text-sm' : 'text-base'}`}
+              className={`text-white leading-relaxed flex-1 ${isCompact ? "text-sm" : "text-base"}`}
               dangerouslySetInnerHTML={{ __html: processedLine.slice(2) }}
             />
           </div>
@@ -186,7 +177,7 @@ const MarkdownRenderer: React.FC<{ content: string; isCompact?: boolean }> = ({ 
           <div key={index} className="flex items-start gap-2 mb-1">
             <span className="text-white/70 mt-1">{numberedMatch[1]}.</span>
             <span
-              className={`text-white leading-relaxed flex-1 ${isCompact ? 'text-sm' : 'text-base'}`}
+              className={`text-white leading-relaxed flex-1 ${isCompact ? "text-sm" : "text-base"}`}
               dangerouslySetInnerHTML={{ __html: numberedMatch[2] }}
             />
           </div>
@@ -202,7 +193,7 @@ const MarkdownRenderer: React.FC<{ content: string; isCompact?: boolean }> = ({ 
       return (
         <p
           key={index}
-          className={`text-white leading-relaxed mb-2 ${isCompact ? 'text-sm' : 'text-base'}`}
+          className={`text-white leading-relaxed mb-2 ${isCompact ? "text-sm" : "text-base"}`}
           dangerouslySetInnerHTML={{ __html: processedLine }}
         />
       )
@@ -245,12 +236,10 @@ const ImageModal: React.FC<{
 
 function MemoApp() {
   // Preview expansion state for memo cards
-  const [expandedPreviews, setExpandedPreviews] = useState<string[]>([]);
+  const [expandedPreviews, setExpandedPreviews] = useState<string[]>([])
   const toggleExpand = (id: string) => {
-    setExpandedPreviews(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
-  };
+    setExpandedPreviews((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
   const [memos, setMemos] = useState<Memo[]>([])
   const [dailySummary, setDailySummary] = useState<DailySummary | null>(null)
   const [timeZone, setTimeZone] = useState<string>("")
@@ -325,12 +314,32 @@ function MemoApp() {
   // Categories states
   const [categories, setCategories] = useState<Record<string, CategoryConfig>>(CATEGORIES)
 
+  // Common API call function with 401 handling
+  const apiCall = async (url: string, options: RequestInit = {}) => {
+    try {
+      const response = await fetch(url, {
+        credentials: "include",
+        ...options,
+      })
+
+      if (response.status === 401) {
+        // 401 Unauthorized - redirect to login
+        console.log("401 Unauthorized - redirecting to login")
+        window.location.href = "/login"
+        return null
+      }
+
+      return response
+    } catch (error) {
+      console.error("API call failed:", error)
+      throw error
+    }
+  }
+
   const fetchUser = async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/me`, {
-        credentials: "include",
-      })
-      if (res.ok) {
+      const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/me`)
+      if (res && res.ok) {
         const userData = await res.json()
         setUser(userData)
       }
@@ -341,9 +350,8 @@ function MemoApp() {
 
   const handleLogout = async () => {
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/logout`, {
+      await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/logout`, {
         method: "POST",
-        credentials: "include",
       })
       window.location.href = "/login"
     } catch (err) {
@@ -354,10 +362,8 @@ function MemoApp() {
 
   const fetchCustomCategories = async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/categories/custom`, {
-        credentials: "include",
-      })
-      if (res.ok) {
+      const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/categories/custom`)
+      if (res && res.ok) {
         const data = await res.json()
         setCustomCategories(data.categories)
 
@@ -452,10 +458,8 @@ function MemoApp() {
       // Fetch daily memos using /memo/list endpoint
       const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/list?tz=${encodeURIComponent(timeZone)}&start_date=${dateStr}&end_date=${dateStr}`
 
-      const res = await fetch(url, {
-        credentials: "include",
-      })
-      if (res.ok) {
+      const res = await apiCall(url)
+      if (res && res.ok) {
         const data = await res.json()
         setMemos(data || [])
       }
@@ -479,10 +483,8 @@ function MemoApp() {
     try {
       const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/list?tz=${encodeURIComponent(timeZone)}&start_date=${startDateStr}&end_date=${endDateStr}`
 
-      const res = await fetch(url, {
-        credentials: "include",
-      })
-      if (res.ok) {
+      const res = await apiCall(url)
+      if (res && res.ok) {
         const memos = await res.json()
 
         // Group memos by date
@@ -514,10 +516,8 @@ function MemoApp() {
     try {
       const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/list?tz=${encodeURIComponent(timeZone)}&start_date=${startDateStr}&end_date=${endDateStr}`
 
-      const res = await fetch(url, {
-        credentials: "include",
-      })
-      if (res.ok) {
+      const res = await apiCall(url)
+      if (res && res.ok) {
         const memos = await res.json()
 
         // Group memos by date and count
@@ -539,13 +539,10 @@ function MemoApp() {
 
   const fetchDailySummary = async (date: string) => {
     try {
-      const res = await fetch(
+      const res = await apiCall(
         `${process.env.NEXT_PUBLIC_API_BASE_URL}/summary/daily?date=${date}&tz=${encodeURIComponent(timeZone)}`,
-        {
-          credentials: "include",
-        },
       )
-      if (res.ok) {
+      if (res && res.ok) {
         const data = await res.json()
         setDailySummary(data.summary)
       } else {
@@ -615,16 +612,15 @@ function MemoApp() {
     })
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/memo`, {
+      const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/memo`, {
         method: "POST",
         body: formData,
-        credentials: "include",
       })
 
-      if (res.ok) {
+      if (res && res.ok) {
         resetInputState()
         fetchData()
-      } else {
+      } else if (res) {
         console.error("Failed to create memo:", await res.text())
       }
     } catch (err) {
@@ -653,13 +649,12 @@ function MemoApp() {
     formData.append("keep_attachments", editAttachments.existing.map((att) => att.id).join(","))
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/${selectedMemo.id}`, {
+      const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/${selectedMemo.id}`, {
         method: "PUT",
         body: formData,
-        credentials: "include",
       })
 
-      if (res.ok) {
+      if (res && res.ok) {
         resetDetailState()
         fetchData()
       }
@@ -670,12 +665,13 @@ function MemoApp() {
 
   const handleDelete = async (id: string) => {
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/${id}`, {
+      const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/${id}`, {
         method: "DELETE",
-        credentials: "include",
       })
-      resetDetailState()
-      fetchData()
+      if (res) {
+        resetDetailState()
+        fetchData()
+      }
     } catch (err) {
       console.error("Delete failed:", err)
     }
@@ -899,13 +895,12 @@ function MemoApp() {
 
   const updateMemoCategory = async (memoId: string, newCategory: string) => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/${memoId}/category`, {
+      const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/${memoId}/category`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ category: newCategory }),
-        credentials: "include",
       })
-      if (res.ok) {
+      if (res && res.ok) {
         fetchData()
       }
     } catch (err) {
@@ -1028,9 +1023,9 @@ function MemoApp() {
     const imageAttachments = memo.attachments.filter((att) => att.type === "image")
     const audioAttachments = memo.attachments.filter((att) => att.type === "audio")
 
-    const { text: previewText, truncated } = truncateAtLineBreak(memo.content);
-    const isExpanded = expandedPreviews.includes(memo.id);
-    const preview = isExpanded || !truncated ? memo.content : previewText;
+    const { text: previewText, truncated } = truncateAtLineBreak(memo.content)
+    const isExpanded = expandedPreviews.includes(memo.id)
+    const preview = isExpanded || !truncated ? memo.content : previewText
 
     return (
       <div
@@ -1062,7 +1057,10 @@ function MemoApp() {
           <MarkdownRenderer content={preview} isCompact />
           {truncated && (
             <button
-              onClick={(e) => { e.stopPropagation(); toggleExpand(memo.id); }}
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleExpand(memo.id)
+              }}
               className="mt-1 w-6 h-6 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all"
             >
               {isExpanded ? (
@@ -1726,19 +1724,14 @@ function MemoApp() {
 
         {/* Detail Modal */}
         {selectedMemo && (
-          <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end z-50"
-            onClick={resetDetailState}
-          >
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end z-50" onClick={resetDetailState}>
             <div
               className="w-full max-w-md mx-auto backdrop-blur-xl bg-white/10 border-t border-white/20 rounded-t-3xl p-6 max-h-[90vh] overflow-y-auto"
-              onClick={e => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
             >
               {/* Detail/Edit Header */}
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-white/70">
-                  {isEditing ? "메모 수정" : "메모 상세"}
-                </h3>
+                <h3 className="text-lg font-medium text-white/70">{isEditing ? "메모 수정" : "메모 상세"}</h3>
                 <button
                   onClick={resetDetailState}
                   className="text-white/70 p-1 rounded-full hover:bg-white/10 transition"
@@ -1748,9 +1741,8 @@ function MemoApp() {
               </div>
               <hr className="border-t border-white/20 mb-4" />
 
+              {isEditing ? (
                 <>
-                  {isEditing ? (
-                    <>
                   <textarea
                     className="w-full p-4 rounded-xl backdrop-blur-md bg-white/10 border border-white/20 text-white placeholder-white/60 resize-none mb-4"
                     rows={4}
@@ -1938,145 +1930,147 @@ function MemoApp() {
                       삭제
                     </button>
                   </div>
-                    </>
-                  ) : (
-                    <>
-                      {/* Content with Markdown Support */}
-                      <div className="mb-6">
-                        <MarkdownRenderer content={selectedMemo.content} />
-                      </div>
+                </>
+              ) : (
+                <>
+                  {/* Content with Markdown Support */}
+                  <div className="mb-6">
+                    <MarkdownRenderer content={selectedMemo.content} />
+                  </div>
 
-                      {/* Tags */}
-                      {selectedMemo.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mb-6">
-                          {selectedMemo.tags.map((tag, idx) => (
-                            <span key={idx} className="text-sm px-3 py-1 rounded-full bg-white/20 text-white">
-                              #{tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Images Section */}
-                      {selectedMemo.attachments.filter((att) => att.type === "image").length > 0 && (
-                        <div className="mb-6">
-                          <h4 className="text-white font-medium mb-3">이미지</h4>
-                          <div className="flex gap-2 overflow-x-auto pb-2">
-                            {selectedMemo.attachments
-                              .filter((att) => att.type === "image")
-                              .map((attachment) => (
-                                <div
-                                  key={attachment.id}
-                                  className="relative w-20 h-20 rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setImageModal({ isOpen: true, imageUrl: attachment.url })
-                                  }}
-                                >
-                                  <img
-                                    src={attachment.url || "/placeholder.svg"}
-                                    alt={attachment.filename}
-                                    className="w-full h-full object-cover"
-                                  />
-                                  <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/50 transition-opacity">
-                                    <ZoomIn className="w-5 h-5 text-white" />
-                                  </div>
-                                </div>
-                              ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Audio Section */}
-                      {selectedMemo.attachments.filter((att) => att.type === "audio").length > 0 && (
-                        <div className="mb-6">
-                          <h4 className="text-white font-medium mb-3">음성 메모</h4>
-                          <div>
-                            {selectedMemo.attachments
-                              .filter((att) => att.type === "audio")
-                              .map((attachment) => (
-                                <div key={attachment.id} className="mb-4">
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); playAudio(attachment.id, attachment.url); }}
-                                    className="w-full flex items-center justify-center gap-2 px-5 py-4 rounded-2xl bg-white/10 hover:bg-white/20 transition-all"
-                                  >
-                                    {playingAudio === attachment.id ? (
-                                      <Pause className="w-6 h-6 text-white" />
-                                    ) : (
-                                      <Play className="w-6 h-6 text-white" />
-                                    )}
-                                  </button>
-                                </div>
-                              ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Category & Dates just above edit button */}
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          {selectedMemo.category && (() => {
-                            const cat = categories[selectedMemo.category] || CATEGORIES.uncategorized;
-                            return (
-                              <>
-                                <div
-                                  className={`w-8 h-8 rounded-full ${cat.bgColor} flex items-center justify-center`}
-                                  style={{ color: cat.color }}
-                                >
-                                  {cat.icon}
-                                </div>
-                                <span className="text-white font-medium">{cat.name}</span>
-                              </>
-                            );
-                          })()}
-                        </div>
-                        <div className="text-white/60 text-xs text-right space-y-0.5">
-                          <p>
-                            작성일:{" "}
-                            {new Date(selectedMemo.created_at).toLocaleString(locale, {
-                              timeZone,
-                              year: "numeric",
-                              month: "2-digit",
-                              day: "2-digit",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                              second: "2-digit",
-                            })}
-                          </p>
-                          <p>
-                            수정일:{" "}
-                            {new Date(selectedMemo.updated_at).toLocaleString(locale, {
-                              timeZone,
-                              year: "numeric",
-                              month: "2-digit",
-                              day: "2-digit",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                              second: "2-digit",
-                            })}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Edit Button */}
-                      <button
-                        onClick={() => {
-                          setIsEditing(true)
-                          setEditText(selectedMemo.content)
-                          setEditTags(selectedMemo.tags)
-                          setEditAttachments({
-                            existing: selectedMemo.attachments,
-                            newImages: [],
-                            newAudios: [],
-                          })
-                        }}
-                        className="w-full py-3 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/15 transition-all flex items-center justify-center gap-2"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                        메모 수정
-                      </button>
-                    </>
+                  {/* Tags */}
+                  {selectedMemo.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-6">
+                      {selectedMemo.tags.map((tag, idx) => (
+                        <span key={idx} className="text-sm px-3 py-1 rounded-full bg-white/20 text-white">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
                   )}
+
+                  {/* Images Section */}
+                  {selectedMemo.attachments.filter((att) => att.type === "image").length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="text-white font-medium mb-3">이미지</h4>
+                      <div className="flex gap-2 overflow-x-auto pb-2">
+                        {selectedMemo.attachments
+                          .filter((att) => att.type === "image")
+                          .map((attachment) => (
+                            <div
+                              key={attachment.id}
+                              className="relative w-20 h-20 rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setImageModal({ isOpen: true, imageUrl: attachment.url })
+                              }}
+                            >
+                              <img
+                                src={attachment.url || "/placeholder.svg"}
+                                alt={attachment.filename}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/50 transition-opacity">
+                                <ZoomIn className="w-5 h-5 text-white" />
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Audio Section */}
+                  {selectedMemo.attachments.filter((att) => att.type === "audio").length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="text-white font-medium mb-3">음성 메모</h4>
+                      <div>
+                        {selectedMemo.attachments
+                          .filter((att) => att.type === "audio")
+                          .map((attachment) => (
+                            <div key={attachment.id} className="mb-4">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  playAudio(attachment.id, attachment.url)
+                                }}
+                                className="w-full flex items-center justify-center gap-2 px-5 py-4 rounded-2xl bg-white/10 hover:bg-white/20 transition-all"
+                              >
+                                {playingAudio === attachment.id ? (
+                                  <Pause className="w-6 h-6 text-white" />
+                                ) : (
+                                  <Play className="w-6 h-6 text-white" />
+                                )}
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Category & Dates just above edit button */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      {selectedMemo.category &&
+                        (() => {
+                          const cat = categories[selectedMemo.category] || CATEGORIES.uncategorized
+                          return (
+                            <>
+                              <div
+                                className={`w-8 h-8 rounded-full ${cat.bgColor} flex items-center justify-center`}
+                                style={{ color: cat.color }}
+                              >
+                                {cat.icon}
+                              </div>
+                              <span className="text-white font-medium">{cat.name}</span>
+                            </>
+                          )
+                        })()}
+                    </div>
+                    <div className="text-white/60 text-xs text-right space-y-0.5">
+                      <p>
+                        작성일:{" "}
+                        {new Date(selectedMemo.created_at).toLocaleString(locale, {
+                          timeZone,
+                          year: "numeric",
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
+                      </p>
+                      <p>
+                        수정일:{" "}
+                        {new Date(selectedMemo.updated_at).toLocaleString(locale, {
+                          timeZone,
+                          year: "numeric",
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Edit Button */}
+                  <button
+                    onClick={() => {
+                      setIsEditing(true)
+                      setEditText(selectedMemo.content)
+                      setEditTags(selectedMemo.tags)
+                      setEditAttachments({
+                        existing: selectedMemo.attachments,
+                        newImages: [],
+                        newAudios: [],
+                      })
+                    }}
+                    className="w-full py-3 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/15 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    메모 수정
+                  </button>
                 </>
               )}
             </div>

@@ -899,9 +899,12 @@ function MemoApp() {
   const truncateAtLineBreak = (content: string, maxLength = 100) => {
     const firstLineBreak = content.indexOf("\n")
     if (firstLineBreak !== -1 && firstLineBreak < maxLength) {
-      return content.substring(0, firstLineBreak) + "..."
+      return { text: content.substring(0, firstLineBreak), truncated: true }
     }
-    return content.length > maxLength ? content.substring(0, maxLength) + "..." : content
+    if (content.length > maxLength) {
+      return { text: content.substring(0, maxLength), truncated: true }
+    }
+    return { text: content, truncated: false }
   }
 
   const renderDailySummary = () => {
@@ -1026,7 +1029,6 @@ function MemoApp() {
               )}
               <span className="text-xs text-white/60">{time}</span>
             </div>
-
             {memo.attachments.length > 0 && (
               <div className="mb-3">
                 <div className="flex gap-2 mb-2">
@@ -1058,9 +1060,11 @@ function MemoApp() {
                 )}
               </div>
             )}
-
-            <p className="text-white text-sm leading-relaxed line-clamp-3 mb-3">{truncateAtLineBreak(memo.content)}</p>
-
+            const contentResult = truncateAtLineBreak(memo.content)
+            <p className="text-white text-sm leading-relaxed line-clamp-3 mb-3">
+              {contentResult.text}
+              {contentResult.truncated && <span className="text-white/40 font-light ml-1">...</span>}
+            </p>
             {memo.tags.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {memo.tags.slice(0, 3).map((tag, idx) => (
@@ -1925,13 +1929,13 @@ function MemoApp() {
                   {selectedMemo.attachments.filter((att) => att.type === "image").length > 0 && (
                     <div className="mb-6">
                       <h4 className="text-white font-medium mb-3">이미지</h4>
-                      <div className="max-h-64 overflow-y-auto space-y-2">
+                      <div className="flex gap-2 overflow-x-auto pb-2">
                         {selectedMemo.attachments
                           .filter((att) => att.type === "image")
                           .map((attachment) => (
                             <div
                               key={attachment.id}
-                              className="w-20 h-20 rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                              className="relative w-20 h-20 rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0"
                               onClick={() => setImageModal({ isOpen: true, imageUrl: attachment.url })}
                             >
                               <img

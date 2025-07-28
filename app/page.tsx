@@ -540,10 +540,17 @@ function MemoApp() {
       mediaRecorder.ondataavailable = (e) => chunks.push(e.data)
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunks, { type: "audio/webm" })
-        setInputAttachments((prev) => ({
-          ...prev,
-          audios: [...prev.audios, blob],
-        }))
+        if (isEditing && selectedMemo) {
+          setEditAttachments((prev) => ({
+            ...prev,
+            newAudios: [...prev.newAudios, blob],
+          }))
+        } else {
+          setInputAttachments((prev) => ({
+            ...prev,
+            audios: [...prev.audios, blob],
+          }))
+        }
         stream.getTracks().forEach((track) => track.stop())
       }
 
@@ -570,9 +577,32 @@ function MemoApp() {
       return true
     })
 
-    setInputAttachments((prev) => ({
+    if (isEditing && selectedMemo) {
+      setEditAttachments((prev) => ({
+        ...prev,
+        newImages: [...prev.newImages, ...validImages],
+      }))
+    } else {
+      setInputAttachments((prev) => ({
+        ...prev,
+        images: [...prev.images, ...validImages],
+      }))
+    }
+    setShowImageOptions(false)
+  }
+
+  const addEditImages = (files: FileList | null) => {
+    if (!files) return
+
+    const validImages = Array.from(files).filter((file) => {
+      if (!file.type.startsWith("image/")) return false
+      if (file.size > 10 * 1024 * 1024) return false
+      return true
+    })
+
+    setEditAttachments((prev) => ({
       ...prev,
-      images: [...prev.images, ...validImages],
+      newImages: [...prev.newImages, ...validImages],
     }))
     setShowImageOptions(false)
   }
@@ -1675,9 +1705,7 @@ function MemoApp() {
                       <span className="text-sm">사진 추가</span>
                     </button>
                     <button
-                      onClick={
-                        isRecording ? stopRecording : isEditing && selectedMemo ? startEditRecording : startRecording
-                      }
+                      onClick={isRecording ? stopRecording : startRecording}
                       className={`flex-1 py-3 rounded-xl border text-white hover:bg-white/15 transition-all flex items-center justify-center gap-2 ${
                         isRecording ? "bg-red-500/20 border-red-500/30" : "bg-white/10 border-white/20"
                       }`}
@@ -1828,12 +1856,7 @@ function MemoApp() {
                 </button>
                 <button
                   onClick={() => {
-                    if (isEditing && selectedMemo) {
-                      // For edit mode, we'll use the same camera input but handle differently
-                      cameraInputRef.current?.click()
-                    } else {
-                      cameraInputRef.current?.click()
-                    }
+                    cameraInputRef.current?.click()
                     setShowImageOptions(false)
                   }}
                   className="flex-1 py-3 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/15 transition-all"
@@ -1875,13 +1898,7 @@ function MemoApp() {
           multiple
           ref={cameraInputRef}
           className="hidden"
-          onChange={(e) => {
-            if (isEditing && selectedMemo) {
-              addEditImages(e.target.files)
-            } else {
-              addImages(e.target.files)
-            }
-          }}
+          onChange={(e) => addImages(e.target.files)}
         />
 
         <input
@@ -1903,44 +1920,4 @@ export default function HomePage() {
       <MemoApp />
     </AuthGuard>
   )
-}
-
-const startEditRecording = async () => {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    const mediaRecorder = new MediaRecorder(stream)
-    mediaRecorderRef.current = mediaRecorder
-
-    const chunks: Blob[] = []
-    mediaRecorder.ondataavailable = (e) => chunks.push(e.data)
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(chunks, { type: "audio/webm" })
-      setEditAttachments((prev) => ({
-        ...prev,
-        newAudios: [...prev.newAudios, blob],
-      }))
-      stream.getTracks().forEach((track) => track.stop())
-    }
-
-    mediaRecorder.start()
-    setIsRecording(true)
-  } catch (error) {
-    console.error("Recording failed:", error)
-  }
-}
-
-const addEditImages = (files: FileList | null) => {
-  if (!files) return
-
-  const validImages = Array.from(files).filter((file) => {
-    if (!file.type.startsWith("image/")) return false
-    if (file.size > 10 * 1024 * 1024) return false
-    return true
-  })
-
-  setEditAttachments((prev) => ({
-    ...prev,
-    newImages: [...prev.newImages, ...validImages],
-  }))
-  setShowImageOptions(false)
 }

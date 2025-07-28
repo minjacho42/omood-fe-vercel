@@ -1,0 +1,15 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 무 몸통(동그라미) -->
+  <ellipse cx="32" cy="40" rx="18" ry="16" fill="#BFA2DB" stroke="#7C4BC3" stroke-width="2"/>
+  <!-- 무 꼬리(뿌리) -->
+  <path d="M32 56 Q31 58 30 62" stroke="#7C4BC3" stroke-width="2" fill="none"/>
+  <path d="M32 56 Q33 58 34 62" stroke="#7C4BC3" stroke-width="2" fill="none"/>
+  <!-- 무 잎사귀 (좌우) -->
+  <ellipse cx="25" cy="20" rx="4" ry="7" fill="#22C55E" stroke="#166534" stroke-width="1.5" transform="rotate(-20 25 20)" />
+  <ellipse cx="32" cy="18" rx="4" ry="8" fill="#22C55E" stroke="#166534" stroke-width="1.5" />
+  <ellipse cx="39" cy="20" rx="4" ry="7" fill="#22C55E" stroke="#166534" stroke-width="1.5" transform="rotate(20 39 20)" />
+  <!-- 얼굴: 눈/미소 -->
+  <circle cx="27" cy="44" r="2" fill="#7C4BC3"/>
+  <circle cx="37" cy="44" r="2" fill="#7C4BC3"/>
+  <path d="M28 50 Q32 54 36 50" stroke="#7C4BC3" stroke-width="2" fill="none" stroke-linecap="round"/>
+</svg>

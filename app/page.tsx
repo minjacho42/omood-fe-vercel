@@ -1009,83 +1009,89 @@ function MemoApp() {
 
     // Calculate content truncation before JSX
     const contentResult = truncateAtLineBreak(memo.content)
+    const imageAttachments = memo.attachments.filter((att) => att.type === "image")
+    const audioAttachments = memo.attachments.filter((att) => att.type === "audio")
 
     return (
       <div
         key={memo.id}
-        className="backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-4 cursor-pointer hover:bg-white/15 transition-all duration-200"
+        className="backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-5 cursor-pointer hover:bg-white/15 transition-all duration-200"
         onClick={() => setSelectedMemo(memo)}
       >
-        <div className="flex items-start gap-3">
-          <div
-            className={`w-10 h-10 rounded-full ${category.bgColor} flex items-center justify-center flex-shrink-0`}
-            style={{ color: category.color }}
-          >
-            {category.icon}
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs font-medium text-white/80">{category.name}</span>
-              {memo.category_confidence && (
-                <span className="text-xs text-white/60">{Math.round(memo.category_confidence * 100)}%</span>
-              )}
-              <span className="text-xs text-white/60">{time}</span>
+        {/* Header with category and time */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div
+              className={`w-8 h-8 rounded-full ${category.bgColor} flex items-center justify-center flex-shrink-0`}
+              style={{ color: category.color }}
+            >
+              {category.icon}
             </div>
+            <div>
+              <span className="text-sm font-medium text-white/90">{category.name}</span>
+              {memo.category_confidence && (
+                <span className="text-xs text-white/60 ml-2">{Math.round(memo.category_confidence * 100)}%</span>
+              )}
+            </div>
+          </div>
+          <span className="text-xs text-white/60">{time}</span>
+        </div>
 
-            {memo.attachments.length > 0 && (
-              <div className="mb-3">
-                <div className="flex gap-2 mb-2">
-                  {memo.attachments
-                    .filter((att) => att.type === "image")
-                    .slice(0, 3)
-                    .map((attachment) => (
-                      <div key={attachment.id} className="w-16 h-16 rounded-lg overflow-hidden">
-                        <img
-                          src={attachment.url || "/placeholder.svg"}
-                          alt={attachment.filename}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ))}
-                  {memo.attachments.filter((att) => att.type === "image").length > 3 && (
-                    <div className="w-16 h-16 rounded-lg bg-white/10 flex items-center justify-center">
-                      <span className="text-xs text-white/70">
-                        +{memo.attachments.filter((att) => att.type === "image").length - 3}
-                      </span>
-                    </div>
-                  )}
+        {/* Content */}
+        <div className="mb-4">
+          <p className="text-white text-base leading-relaxed">
+            {contentResult.text}
+            {contentResult.truncated && <span className="text-white/40 font-light ml-1">...</span>}
+          </p>
+        </div>
+
+        {/* Images - Horizontal scroll layout */}
+        {imageAttachments.length > 0 && (
+          <div className="mb-4">
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+              {imageAttachments.slice(0, 4).map((attachment) => (
+                <div key={attachment.id} className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0">
+                  <img
+                    src={attachment.url || "/placeholder.svg"}
+                    alt={attachment.filename}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
-                {memo.attachments.filter((att) => att.type === "audio").length > 0 && (
-                  <div className="flex items-center gap-2 text-xs text-white/70">
-                    <Mic className="w-3 h-3" />
-                    <span>{memo.attachments.filter((att) => att.type === "audio").length}개 음성 메모</span>
-                  </div>
-                )}
-              </div>
-            )}
+              ))}
+              {imageAttachments.length > 4 && (
+                <div className="w-20 h-20 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs text-white/70 font-medium">+{imageAttachments.length - 4}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
-            <p className="text-white text-sm leading-relaxed line-clamp-3 mb-3">
-              {contentResult.text}
-              {contentResult.truncated && <span className="text-white/40 font-light ml-1">...</span>}
-            </p>
+        {/* Audio indicator - simplified without filename */}
+        {audioAttachments.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5">
+              <Mic className="w-4 h-4 text-blue-400" />
+              <span className="text-sm text-white/80">음성 메모 {audioAttachments.length}개</span>
+            </div>
+          </div>
+        )}
 
-            {memo.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {memo.tags.slice(0, 3).map((tag, idx) => (
-                  <span key={idx} className="text-xs px-2 py-1 rounded-full bg-white/10 text-white/70">
-                    #{tag}
-                  </span>
-                ))}
-                {memo.tags.length > 3 && (
-                  <span className="text-xs px-2 py-1 rounded-full bg-white/10 text-white/60">
-                    +{memo.tags.length - 3}
-                  </span>
-                )}
-              </div>
+        {/* Tags */}
+        {memo.tags.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {memo.tags.slice(0, 3).map((tag, idx) => (
+              <span key={idx} className="text-xs px-3 py-1.5 rounded-full bg-white/15 text-white/80 font-medium">
+                #{tag}
+              </span>
+            ))}
+            {memo.tags.length > 3 && (
+              <span className="text-xs px-3 py-1.5 rounded-full bg-white/10 text-white/60">
+                +{memo.tags.length - 3}
+              </span>
             )}
           </div>
-        </div>
+        )}
       </div>
     )
   }

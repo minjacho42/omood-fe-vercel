@@ -117,6 +117,13 @@ const formatLocalDate = (date: Date): string => {
   return `${year}-${month}-${day}`
 }
 
+// Helper function to convert UTC datetime string to local date string
+const convertUtcToLocalDate = (utcDatetime: string, timeZone: string): string => {
+  const utcDate = utcDatetime.endsWith("Z") ? new Date(utcDatetime) : new Date(utcDatetime + "Z")
+  const localDate = new Date(utcDate.toLocaleString("en-US", { timeZone }))
+  return formatLocalDate(localDate)
+}
+
 // Simple markdown renderer component
 const MarkdownRenderer: React.FC<{ content: string; isCompact?: boolean }> = ({ content, isCompact = false }) => {
   const renderMarkdown = (text: string) => {
@@ -495,14 +502,14 @@ function MemoApp() {
       if (res && res.ok) {
         const memos = await res.json()
 
-        // Group memos by date
+        // Group memos by date using local timezone
         const groupedMemos: { [key: string]: Memo[] } = {}
         memos.forEach((memo: Memo) => {
-          const memoDate = memo.created_at.split("T")[0]
-          if (!groupedMemos[memoDate]) {
-            groupedMemos[memoDate] = []
+          const localMemoDate = convertUtcToLocalDate(memo.created_at, timeZone)
+          if (!groupedMemos[localMemoDate]) {
+            groupedMemos[localMemoDate] = []
           }
-          groupedMemos[memoDate].push(memo)
+          groupedMemos[localMemoDate].push(memo)
         })
 
         setWeeklyData(groupedMemos)
@@ -528,14 +535,14 @@ function MemoApp() {
       if (res && res.ok) {
         const memos = await res.json()
 
-        // Group memos by date and count
+        // Group memos by date and count using local timezone
         const groupedData: { [key: string]: { memo_count: number; has_summary: boolean } } = {}
         memos.forEach((memo: Memo) => {
-          const memoDate = memo.created_at.split("T")[0]
-          if (!groupedData[memoDate]) {
-            groupedData[memoDate] = { memo_count: 0, has_summary: false }
+          const localMemoDate = convertUtcToLocalDate(memo.created_at, timeZone)
+          if (!groupedData[localMemoDate]) {
+            groupedData[localMemoDate] = { memo_count: 0, has_summary: false }
           }
-          groupedData[memoDate].memo_count++
+          groupedData[localMemoDate].memo_count++
         })
 
         setMonthlyData(groupedData)
@@ -2036,28 +2043,36 @@ function MemoApp() {
                     </div>
                     <div className="text-white/60 text-xs text-right space-y-0.5">
                       <p>
-                        작성일:{" "}
-                        {new Date(selectedMemo.created_at).toLocaleString(locale, {
-                          timeZone,
-                          year: "numeric",
-                          month: "2-digit",
-                          day: "2-digit",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          second: "2-digit",
-                        })}
+                        작성일: {(() => {
+                          const utcDate = selectedMemo.created_at.endsWith("Z")
+                            ? new Date(selectedMemo.created_at)
+                            : new Date(selectedMemo.created_at + "Z")
+                          return utcDate.toLocaleString(locale, {
+                            timeZone,
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          })
+                        })()}
                       </p>
                       <p>
-                        수정일:{" "}
-                        {new Date(selectedMemo.updated_at).toLocaleString(locale, {
-                          timeZone,
-                          year: "numeric",
-                          month: "2-digit",
-                          day: "2-digit",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          second: "2-digit",
-                        })}
+                        수정일: {(() => {
+                          const utcDate = selectedMemo.updated_at.endsWith("Z")
+                            ? new Date(selectedMemo.updated_at)
+                            : new Date(selectedMemo.updated_at + "Z")
+                          return utcDate.toLocaleString(locale, {
+                            timeZone,
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          })
+                        })()}
                       </p>
                     </div>
                   </div>

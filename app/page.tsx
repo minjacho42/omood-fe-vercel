@@ -2028,28 +2028,38 @@ function MemoApp() {
                     </div>
                     <div className="text-white/60 text-xs text-right space-y-0.5">
                       <p>
-                        작성일:{" "}
-                        {new Date(selectedMemo.created_at).toLocaleString(locale, {
-                          timeZone,
-                          year: "numeric",
-                          month: "2-digit",
-                          day: "2-digit",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          second: "2-digit",
-                        })}
+                        작성일:{' '}
+                        {(() => {
+                          const dt = selectedMemo.created_at.endsWith('Z')
+                            ? new Date(selectedMemo.created_at)
+                            : new Date(selectedMemo.created_at + 'Z');
+                          return dt.toLocaleString(locale, {
+                            timeZone,
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                          });
+                        })()}
                       </p>
                       <p>
-                        수정일:{" "}
-                        {new Date(selectedMemo.updated_at).toLocaleString(locale, {
-                          timeZone,
-                          year: "numeric",
-                          month: "2-digit",
-                          day: "2-digit",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          second: "2-digit",
-                        })}
+                        수정일:{' '}
+                        {(() => {
+                          const dt = selectedMemo.updated_at.endsWith('Z')
+                            ? new Date(selectedMemo.updated_at)
+                            : new Date(selectedMemo.updated_at + 'Z');
+                          return dt.toLocaleString(locale, {
+                            timeZone,
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                          });
+                        })()}
                       </p>
                     </div>
                   </div>

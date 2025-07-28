@@ -3,7 +3,32 @@
 import type React from "react"
 
 import { useEffect, useState, useRef, useMemo } from "react"
-import { Plus, Search, Edit3, BookOpen, ShoppingCart, Lightbulb, Briefcase, Heart, Mic, Calendar, Settings, LogOut, User, ChevronLeft, ChevronRight, Sparkles, BarChart3, Grid3X3, Clock, X, Camera, Pause, Play, Trash2 } from 'lucide-react'
+import {
+  Plus,
+  Search,
+  Edit3,
+  BookOpen,
+  ShoppingCart,
+  Lightbulb,
+  Briefcase,
+  Heart,
+  Mic,
+  Calendar,
+  Settings,
+  LogOut,
+  User,
+  ChevronLeft,
+  ChevronRight,
+  Sparkles,
+  BarChart3,
+  Grid3X3,
+  Clock,
+  X,
+  Camera,
+  Pause,
+  Play,
+  Trash2,
+} from "lucide-react"
 import AuthGuard from "@/components/auth-guard"
 import CategoryManagement from "@/components/category-management"
 
@@ -272,10 +297,10 @@ function MemoApp() {
 
   const fetchDailyData = async () => {
     const dateStr = currentDate.toISOString().split("T")[0]
-    
+
     try {
       // Fetch daily memos using /memo/list endpoint
-      let url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/list?tz=${encodeURIComponent(timeZone)}&start_date=${dateStr}&end_date=${dateStr}`
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/list?tz=${encodeURIComponent(timeZone)}&start_date=${dateStr}&end_date=${dateStr}`
 
       const res = await fetch(url, {
         credentials: "include",
@@ -303,13 +328,13 @@ function MemoApp() {
 
     try {
       const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/list?tz=${encodeURIComponent(timeZone)}&start_date=${startDateStr}&end_date=${endDateStr}`
-      
+
       const res = await fetch(url, {
         credentials: "include",
       })
       if (res.ok) {
         const memos = await res.json()
-        
+
         // Group memos by date
         const groupedMemos: { [key: string]: Memo[] } = {}
         memos.forEach((memo: Memo) => {
@@ -319,7 +344,7 @@ function MemoApp() {
           }
           groupedMemos[memoDate].push(memo)
         })
-        
+
         setWeeklyData(groupedMemos)
       }
     } catch (err) {
@@ -338,13 +363,13 @@ function MemoApp() {
 
     try {
       const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/list?tz=${encodeURIComponent(timeZone)}&start_date=${startDateStr}&end_date=${endDateStr}`
-      
+
       const res = await fetch(url, {
         credentials: "include",
       })
       if (res.ok) {
         const memos = await res.json()
-        
+
         // Group memos by date and count
         const groupedData: { [key: string]: { memo_count: number; has_summary: boolean } } = {}
         memos.forEach((memo: Memo) => {
@@ -354,7 +379,7 @@ function MemoApp() {
           }
           groupedData[memoDate].memo_count++
         })
-        
+
         setMonthlyData(groupedData)
       }
     } catch (err) {
@@ -708,8 +733,49 @@ function MemoApp() {
   }
 
   const renderDailySummary = () => {
-    if (!dailySummary) return null
+    // Case 1: No memos for the day
+    if (memos.length === 0) {
+      return (
+        <div className="mb-6 backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-gray-500 to-slate-500 flex items-center justify-center">
+              <Edit3 className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-white font-semibold">오늘의 메모</h3>
+              <p className="text-white/60 text-sm">메모가 없습니다</p>
+            </div>
+          </div>
+          <div className="text-center py-8">
+            <p className="text-white/70 text-lg mb-2">아직 작성된 메모가 없어요</p>
+            <p className="text-white/50 text-sm">새로운 메모를 작성해서 하루를 기록해보세요</p>
+          </div>
+        </div>
+      )
+    }
 
+    // Case 2: Memos exist but no daily summary
+    if (!dailySummary) {
+      return (
+        <div className="mb-6 backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center">
+              <Clock className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-white font-semibold">오늘의 메모</h3>
+              <p className="text-white/60 text-sm">{memos.length}개의 메모</p>
+            </div>
+          </div>
+          <div className="text-center py-6">
+            <p className="text-white/70 text-base mb-2">일일 요약이 아직 생성되지 않았습니다</p>
+            <p className="text-white/50 text-sm">요약은 자동으로 생성되며, 잠시 후 확인하실 수 있습니다</p>
+          </div>
+        </div>
+      )
+    }
+
+    // Case 3: Both memos and daily summary exist
     return (
       <div className="mb-6 backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-6">
         <div className="flex items-center gap-3 mb-4">
@@ -893,9 +959,7 @@ function MemoApp() {
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-white/90 text-sm font-medium">{dayMemos.length}개 메모</span>
                       </div>
-                      <p className="text-white/80 text-sm line-clamp-2">
-                        {dayMemos[0]?.content || "메모 내용"}
-                      </p>
+                      <p className="text-white/80 text-sm line-clamp-2">{dayMemos[0]?.content || "메모 내용"}</p>
                     </div>
                   ) : (
                     <div className="text-white/60 text-sm">메모가 없습니다</div>
@@ -928,6 +992,25 @@ function MemoApp() {
     )
   }
 
+  const getIntensityLevel = (memoCount: number) => {
+    if (memoCount === 0) return 0
+    if (memoCount <= 2) return 1
+    if (memoCount <= 5) return 2
+    if (memoCount <= 10) return 3
+    return 4
+  }
+
+  const getIntensityColor = (level: number) => {
+    const colors = [
+      "bg-white/5 border-white/10", // 0 memos
+      "bg-blue-500/20 border-blue-400/30", // 1-2 memos
+      "bg-blue-500/40 border-blue-400/50", // 3-5 memos
+      "bg-blue-500/60 border-blue-400/70", // 6-10 memos
+      "bg-blue-500/80 border-blue-400/90", // 10+ memos
+    ]
+    return colors[level] || colors[0]
+  }
+
   const renderMonthlyView = () => {
     const year = currentDate.getFullYear()
     const month = currentDate.getMonth()
@@ -949,50 +1032,117 @@ function MemoApp() {
       weekRows.push(days.slice(i, i + 7))
     }
 
+    // Calculate statistics
+    const totalMemos = Object.values(monthlyData).reduce((sum, data) => sum + data.memo_count, 0)
+    const activeDays = Object.keys(monthlyData).length
+    const maxMemos = Math.max(...Object.values(monthlyData).map((data) => data.memo_count), 0)
+
     return (
-      <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-4">
-        <div className="grid grid-cols-7 gap-1 mb-4">
-          {["일", "월", "화", "수", "목", "금", "토"].map((day) => (
-            <div key={day} className="text-center text-white/60 text-sm py-2 font-medium">
-              {day}
+      <div className="space-y-6">
+        {/* Monthly Statistics */}
+        <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-4">
+          <h3 className="text-white font-semibold mb-4">이번 달 통계</h3>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-white mb-1">{totalMemos}</div>
+              <div className="text-white/60 text-sm">총 메모</div>
             </div>
-          ))}
+            <div className="text-center">
+              <div className="text-2xl font-bold text-white mb-1">{activeDays}</div>
+              <div className="text-white/60 text-sm">활동일</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-white mb-1">{maxMemos}</div>
+              <div className="text-white/60 text-sm">최대 메모</div>
+            </div>
+          </div>
         </div>
 
-        <div className="space-y-1">
-          {weekRows.map((week, weekIndex) => (
-            <div key={weekIndex} className="grid grid-cols-7 gap-1">
-              {week.map((day, dayIndex) => {
-                const dateStr = day.toISOString().split("T")[0]
-                const dayData = monthlyData[dateStr]
-                const isCurrentMonth = day.getMonth() === month
-                const isToday = day.toDateString() === new Date().toDateString()
-
-                return (
-                  <div
-                    key={dayIndex}
-                    className={`aspect-square flex flex-col items-center justify-center text-xs cursor-pointer rounded-lg transition-all duration-200 ${
-                      isCurrentMonth ? "text-white hover:bg-white/20" : "text-white/40"
-                    } ${isToday ? "bg-blue-500/30 ring-1 ring-blue-400" : ""}`}
-                    onClick={() => {
-                      if (isCurrentMonth) {
-                        setViewMode("daily")
-                        setCurrentDate(day)
-                      }
-                    }}
-                  >
-                    <div className="font-medium">{day.getDate()}</div>
-                    {dayData && (
-                      <div className="flex items-center gap-1 mt-1">
-                        {dayData.has_summary && <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />}
-                        {dayData.memo_count > 0 && <div className="text-xs text-white/70">{dayData.memo_count}</div>}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+        {/* Calendar Grid */}
+        <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-white font-semibold">메모 활동</h3>
+            <div className="flex items-center gap-2 text-xs text-white/60">
+              <span>적음</span>
+              <div className="flex gap-1">
+                {[0, 1, 2, 3, 4].map((level) => (
+                  <div key={level} className={`w-3 h-3 rounded-sm border ${getIntensityColor(level)}`} />
+                ))}
+              </div>
+              <span>많음</span>
             </div>
-          ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 mb-4">
+            {["일", "월", "화", "수", "목", "금", "토"].map((day) => (
+              <div key={day} className="text-center text-white/60 text-sm py-2 font-medium">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-1">
+            {weekRows.map((week, weekIndex) => (
+              <div key={weekIndex} className="grid grid-cols-7 gap-1">
+                {week.map((day, dayIndex) => {
+                  const dateStr = day.toISOString().split("T")[0]
+                  const dayData = monthlyData[dateStr]
+                  const isCurrentMonth = day.getMonth() === month
+                  const isToday = day.toDateString() === new Date().toDateString()
+                  const memoCount = dayData?.memo_count || 0
+                  const intensityLevel = getIntensityLevel(memoCount)
+
+                  return (
+                    <div
+                      key={dayIndex}
+                      className={`aspect-square flex flex-col items-center justify-center text-xs cursor-pointer rounded-lg transition-all duration-200 border ${
+                        isCurrentMonth ? "text-white hover:scale-105" : "text-white/40"
+                      } ${isToday ? "ring-2 ring-blue-400" : ""} ${getIntensityColor(intensityLevel)}`}
+                      onClick={() => {
+                        if (isCurrentMonth) {
+                          setViewMode("daily")
+                          setCurrentDate(day)
+                        }
+                      }}
+                      title={`${day.getDate()}일 - ${memoCount}개 메모`}
+                    >
+                      <div className="font-medium">{day.getDate()}</div>
+                      {memoCount > 0 && (
+                        <div className="text-xs text-white/80 mt-0.5">{memoCount > 99 ? "99+" : memoCount}</div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-4">
+          <h4 className="text-white font-medium mb-3">범례</h4>
+          <div className="space-y-2 text-sm text-white/70">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-sm bg-white/5 border border-white/10" />
+              <span>메모 없음</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-sm bg-blue-500/20 border border-blue-400/30" />
+              <span>1-2개 메모</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-sm bg-blue-500/40 border border-blue-400/50" />
+              <span>3-5개 메모</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-sm bg-blue-500/60 border border-blue-400/70" />
+              <span>6-10개 메모</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-sm bg-blue-500/80 border border-blue-400/90" />
+              <span>10개 이상 메모</span>
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -1200,16 +1350,16 @@ function MemoApp() {
           {viewMode === "daily" && (
             <>
               {renderDailySummary()}
-              {filteredMemos.length === 0 ? (
+              {filteredMemos.length === 0 && memos.length > 0 ? (
                 <div className="text-center py-20">
                   <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/10 flex items-center justify-center">
-                    <Edit3 className="w-8 h-8 text-white/50" />
+                    <Search className="w-8 h-8 text-white/50" />
                   </div>
-                  <p className="text-white/70 text-lg mb-2">메모가 없습니다</p>
-                  <p className="text-white/50 text-sm">새로운 메모를 작성해보세요</p>
+                  <p className="text-white/70 text-lg mb-2">검색 결과가 없습니다</p>
+                  <p className="text-white/50 text-sm">다른 검색어나 필터를 시도해보세요</p>
                 </div>
               ) : (
-                <div className="space-y-4">{filteredMemos.map(renderMemoCard)}</div>
+                memos.length > 0 && <div className="space-y-4">{filteredMemos.map(renderMemoCard)}</div>
               )}
             </>
           )}

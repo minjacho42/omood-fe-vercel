@@ -3,27 +3,7 @@
 import type React from "react"
 
 import { useEffect, useState, useRef, useMemo } from "react"
-import {
-  Plus,
-  Search,
-  Edit3,
-  BookOpen,
-  ShoppingCart,
-  Lightbulb,
-  Briefcase,
-  Heart,
-  Mic,
-  Calendar,
-  Settings,
-  LogOut,
-  User,
-  ChevronLeft,
-  ChevronRight,
-  Sparkles,
-  BarChart3,
-  Grid3X3,
-  Clock,
-} from "lucide-react"
+import { Plus, Search, Edit3, BookOpen, ShoppingCart, Lightbulb, Briefcase, Heart, Mic, Calendar, Settings, LogOut, User, ChevronLeft, ChevronRight, Sparkles, BarChart3, Grid3X3, Clock, X, Camera, Pause, Play, Trash2 } from 'lucide-react'
 import AuthGuard from "@/components/auth-guard"
 import CategoryManagement from "@/components/category-management"
 
@@ -143,6 +123,7 @@ function MemoApp() {
   // Category management states
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>([])
   const [showCategoryManagement, setShowCategoryManagement] = useState(false)
+  const [showColorCustomization, setShowColorCustomization] = useState(false)
 
   // Audio playback state
   const [playingAudio, setPlayingAudio] = useState<string | null>(null)
@@ -153,7 +134,7 @@ function MemoApp() {
   const [inlineSearchActive, setInlineSearchActive] = useState(false)
 
   // Weekly/Monthly data
-  const [weeklyData, setWeeklyData] = useState<{ [key: string]: DailySummary }>({})
+  const [weeklyData, setWeeklyData] = useState<{ [key: string]: Memo[] }>({})
   const [monthlyData, setMonthlyData] = useState<{ [key: string]: { memo_count: number; has_summary: boolean } }>({})
 
   // Browser locale for date formatting
@@ -276,14 +257,12 @@ function MemoApp() {
 
   const fetchData = async () => {
     try {
-      const dateStr = currentDate.toISOString().split("T")[0]
-
       if (viewMode === "daily") {
-        await Promise.all([fetchDailyMemos(dateStr), fetchDailySummary(dateStr)])
+        await fetchDailyData()
       } else if (viewMode === "weekly") {
-        await fetchWeeklyData(dateStr)
+        await fetchWeeklyData()
       } else if (viewMode === "monthly") {
-        await fetchMonthlyData(dateStr)
+        await fetchMonthlyData()
       }
     } catch (err) {
       console.error("Error fetching data:", err)
@@ -291,23 +270,95 @@ function MemoApp() {
     }
   }
 
-  const fetchDailyMemos = async (date: string) => {
+  const fetchDailyData = async () => {
+    const dateStr = currentDate.toISOString().split("T")[0]
+    
     try {
-      let url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/daily?date=${date}&tz=${encodeURIComponent(timeZone)}`
-
-      if (categoryFilter) {
-        url += `&category=${categoryFilter}`
-      }
+      // Fetch daily memos using /memo/list endpoint
+      let url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/list?tz=${encodeURIComponent(timeZone)}&start_date=${dateStr}&end_date=${dateStr}`
 
       const res = await fetch(url, {
         credentials: "include",
       })
       if (res.ok) {
         const data = await res.json()
-        setMemos(data.memos || data)
+        setMemos(data || [])
+      }
+
+      // Fetch daily summary (if available)
+      await fetchDailySummary(dateStr)
+    } catch (err) {
+      console.error("Error fetching daily data:", err)
+    }
+  }
+
+  const fetchWeeklyData = async () => {
+    const startOfWeek = new Date(currentDate)
+    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
+    const endOfWeek = new Date(startOfWeek)
+    endOfWeek.setDate(startOfWeek.getDate() + 6)
+
+    const startDateStr = startOfWeek.toISOString().split("T")[0]
+    const endDateStr = endOfWeek.toISOString().split("T")[0]
+
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/list?tz=${encodeURIComponent(timeZone)}&start_date=${startDateStr}&end_date=${endDateStr}`
+      
+      const res = await fetch(url, {
+        credentials: "include",
+      })
+      if (res.ok) {
+        const memos = await res.json()
+        
+        // Group memos by date
+        const groupedMemos: { [key: string]: Memo[] } = {}
+        memos.forEach((memo: Memo) => {
+          const memoDate = memo.created_at.split("T")[0]
+          if (!groupedMemos[memoDate]) {
+            groupedMemos[memoDate] = []
+          }
+          groupedMemos[memoDate].push(memo)
+        })
+        
+        setWeeklyData(groupedMemos)
       }
     } catch (err) {
-      console.error("Error fetching daily memos:", err)
+      console.error("Error fetching weekly data:", err)
+    }
+  }
+
+  const fetchMonthlyData = async () => {
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
+
+    const startDateStr = firstDay.toISOString().split("T")[0]
+    const endDateStr = lastDay.toISOString().split("T")[0]
+
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/list?tz=${encodeURIComponent(timeZone)}&start_date=${startDateStr}&end_date=${endDateStr}`
+      
+      const res = await fetch(url, {
+        credentials: "include",
+      })
+      if (res.ok) {
+        const memos = await res.json()
+        
+        // Group memos by date and count
+        const groupedData: { [key: string]: { memo_count: number; has_summary: boolean } } = {}
+        memos.forEach((memo: Memo) => {
+          const memoDate = memo.created_at.split("T")[0]
+          if (!groupedData[memoDate]) {
+            groupedData[memoDate] = { memo_count: 0, has_summary: false }
+          }
+          groupedData[memoDate].memo_count++
+        })
+        
+        setMonthlyData(groupedData)
+      }
+    } catch (err) {
+      console.error("Error fetching monthly data:", err)
     }
   }
 
@@ -328,40 +379,6 @@ function MemoApp() {
     } catch (err) {
       console.error("Error fetching daily summary:", err)
       setDailySummary(null)
-    }
-  }
-
-  const fetchWeeklyData = async (date: string) => {
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/summary/weekly?date=${date}&tz=${encodeURIComponent(timeZone)}`,
-        {
-          credentials: "include",
-        },
-      )
-      if (res.ok) {
-        const data = await res.json()
-        setWeeklyData(data.summaries || {})
-      }
-    } catch (err) {
-      console.error("Error fetching weekly data:", err)
-    }
-  }
-
-  const fetchMonthlyData = async (date: string) => {
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/summary/monthly?date=${date}&tz=${encodeURIComponent(timeZone)}`,
-        {
-          credentials: "include",
-        },
-      )
-      if (res.ok) {
-        const data = await res.json()
-        setMonthlyData(data.data || {})
-      }
-    } catch (err) {
-      console.error("Error fetching monthly data:", err)
     }
   }
 
@@ -410,10 +427,12 @@ function MemoApp() {
     formData.append("content", inputText)
     formData.append("tags", allTags.join(","))
 
+    // Add image attachments with proper naming convention
     inputAttachments.images.forEach((file, index) => {
       formData.append(`image_${index}`, file, file.name)
     })
 
+    // Add audio attachments with proper naming convention
     inputAttachments.audios.forEach((blob, index) => {
       const file = new File([blob], `audio_${index}.wav`, { type: "audio/wav" })
       formData.append(`audio_${index}`, file)
@@ -429,6 +448,8 @@ function MemoApp() {
       if (res.ok) {
         resetInputState()
         fetchData()
+      } else {
+        console.error("Failed to create memo:", await res.text())
       }
     } catch (err) {
       console.error("Submit failed:", err)
@@ -839,8 +860,15 @@ function MemoApp() {
           const dateStr = day.toISOString().split("T")[0]
           const dayName = day.toLocaleDateString(locale, { weekday: "short" })
           const dayNumber = day.getDate()
-          const summary = weeklyData[dateStr]
+          const dayMemos = weeklyData[dateStr] || []
           const isToday = day.toDateString() === new Date().toDateString()
+
+          // Group memos by category for display
+          const categoryGroups: { [key: string]: number } = {}
+          dayMemos.forEach((memo) => {
+            const category = memo.category || "uncategorized"
+            categoryGroups[category] = (categoryGroups[category] || 0) + 1
+          })
 
           return (
             <div
@@ -860,14 +888,14 @@ function MemoApp() {
                   <div className="text-white text-lg font-bold">{dayNumber}</div>
                 </div>
                 <div className="flex-1">
-                  {summary ? (
+                  {dayMemos.length > 0 ? (
                     <div>
                       <div className="flex items-center gap-2 mb-2">
-                        <Sparkles className="w-4 h-4 text-purple-400" />
-                        <span className="text-white/90 text-sm font-medium">요약 있음</span>
-                        <span className="text-white/60 text-xs">{summary.total_memos}개 메모</span>
+                        <span className="text-white/90 text-sm font-medium">{dayMemos.length}개 메모</span>
                       </div>
-                      <p className="text-white/80 text-sm line-clamp-2">{summary.ai_comment}</p>
+                      <p className="text-white/80 text-sm line-clamp-2">
+                        {dayMemos[0]?.content || "메모 내용"}
+                      </p>
                     </div>
                   ) : (
                     <div className="text-white/60 text-sm">메모가 없습니다</div>
@@ -875,19 +903,19 @@ function MemoApp() {
                 </div>
               </div>
 
-              {summary && summary.category_summaries.length > 0 && (
+              {Object.keys(categoryGroups).length > 0 && (
                 <div className="flex gap-2 flex-wrap">
-                  {summary.category_summaries.map((catSummary, idx) => {
-                    const category = categories[catSummary.category] || CATEGORIES.uncategorized
+                  {Object.entries(categoryGroups).map(([categoryKey, count]) => {
+                    const category = categories[categoryKey] || CATEGORIES.uncategorized
                     return (
-                      <div key={idx} className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/10">
+                      <div key={categoryKey} className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/10">
                         <div
                           className="w-3 h-3 rounded-full flex items-center justify-center"
                           style={{ backgroundColor: category.color }}
                         >
                           <div className="w-1.5 h-1.5 rounded-full bg-white/80" />
                         </div>
-                        <span className="text-xs text-white/70">{catSummary.memo_count}</span>
+                        <span className="text-xs text-white/70">{count}</span>
                       </div>
                     )
                   })}
@@ -1190,8 +1218,417 @@ function MemoApp() {
           {viewMode === "monthly" && renderMonthlyView()}
         </div>
 
-        {/* All modals remain the same as before... */}
-        {/* Input Modal, Detail Modal, Image Options Modal, Category Management Modal */}
+        {/* Input Modal */}
+        {showInput && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end z-50">
+            <div className="w-full max-w-md mx-auto backdrop-blur-xl bg-white/10 border-t border-white/20 rounded-t-3xl p-6 max-h-[80vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-white">새 메모</h3>
+                <button onClick={resetInputState} className="text-white/70">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <textarea
+                className="w-full p-4 rounded-xl backdrop-blur-md bg-white/10 border border-white/20 text-white placeholder-white/60 resize-none mb-4"
+                rows={4}
+                placeholder="메모를 입력하세요..."
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+              />
+
+              {/* Tags Input */}
+              <div className="flex items-center gap-2 mb-4">
+                <input
+                  type="text"
+                  placeholder="태그 추가..."
+                  className="flex-1 pl-4 pr-2 py-3 rounded-xl backdrop-blur-md bg-white/10 border border-white/20 text-white placeholder-white/60"
+                  value={currentTag}
+                  onChange={(e) => setCurrentTag(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      addTag()
+                      e.preventDefault()
+                    }
+                  }}
+                />
+                <button onClick={addTag} className="px-4 py-3 rounded-xl bg-white/20 text-white font-medium">
+                  추가
+                </button>
+              </div>
+
+              {/* Tags Display */}
+              {inputTags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {inputTags.map((tag, idx) => (
+                    <div key={idx} className="px-3 py-1 rounded-full bg-white/20 text-white flex items-center gap-1">
+                      {tag}
+                      <button onClick={() => removeTag(idx)} className="text-white/50">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Attachments Preview */}
+              {(inputAttachments.images.length > 0 || inputAttachments.audios.length > 0) && (
+                <div className="mb-4">
+                  <h4 className="text-white font-medium mb-2">첨부파일</h4>
+
+                  {/* Image Previews */}
+                  {inputAttachments.images.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {inputAttachments.images.map((file, index) => (
+                        <div key={index} className="relative w-24 h-24 rounded-lg overflow-hidden">
+                          <img
+                            src={URL.createObjectURL(file) || "/placeholder.svg"}
+                            alt={file.name}
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            onClick={() => removeInputImage(index)}
+                            className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-all"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Audio Previews */}
+                  {inputAttachments.audios.length > 0 && (
+                    <div className="space-y-2">
+                      {inputAttachments.audios.map((blob, index) => (
+                        <div key={index} className="rounded-xl bg-white/10 p-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white">
+                              <Mic className="w-5 h-5" />
+                            </div>
+                            <span className="text-white text-sm flex-1">음성 메모 {index + 1}</span>
+                            <button
+                              onClick={() => removeInputAudio(index)}
+                              className="text-white/50 hover:text-white transition-all"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3 mb-4">
+                <button
+                  onClick={() => setShowImageOptions(true)}
+                  className="flex-1 py-3 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/15 transition-all flex items-center justify-center gap-2"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span className="text-sm">사진</span>
+                </button>
+                <button
+                  onClick={isRecording ? stopRecording : startRecording}
+                  className={`flex-1 py-3 rounded-xl border text-white hover:bg-white/15 transition-all flex items-center justify-center gap-2 ${
+                    isRecording ? "bg-red-500/20 border-red-500/30" : "bg-white/10 border-white/20"
+                  }`}
+                >
+                  <Mic className="w-4 h-4" />
+                  <span className="text-sm">{isRecording ? "녹음 중..." : "음성"}</span>
+                </button>
+              </div>
+
+              <button
+                onClick={handleSubmit}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-500 to-purple-500 text-white font-medium"
+              >
+                메모 저장
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Detail Modal */}
+        {selectedMemo && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end z-50">
+            <div className="w-full max-w-md mx-auto backdrop-blur-xl bg-white/10 border-t border-white/20 rounded-t-3xl p-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-white">{isEditing ? "메모 수정" : "메모 상세"}</h3>
+                <button onClick={resetDetailState} className="text-white/70">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {isEditing ? (
+                <>
+                  <textarea
+                    className="w-full p-4 rounded-xl backdrop-blur-md bg-white/10 border border-white/20 text-white placeholder-white/60 resize-none mb-4"
+                    rows={4}
+                    placeholder="메모를 입력하세요..."
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                  />
+
+                  {/* Edit Tags Input */}
+                  <div className="flex items-center gap-2 mb-4">
+                    <input
+                      type="text"
+                      placeholder="태그 추가..."
+                      className="flex-1 pl-4 pr-2 py-3 rounded-xl backdrop-blur-md bg-white/10 border border-white/20 text-white placeholder-white/60"
+                      value={editCurrentTag}
+                      onChange={(e) => setEditCurrentTag(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          addEditTag()
+                          e.preventDefault()
+                        }
+                      }}
+                    />
+                    <button onClick={addEditTag} className="px-4 py-3 rounded-xl bg-white/20 text-white font-medium">
+                      추가
+                    </button>
+                  </div>
+
+                  {/* Edit Tags Display */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {editTags.map((tag, idx) => (
+                      <div key={idx} className="px-3 py-1 rounded-full bg-white/20 text-white flex items-center gap-1">
+                        {tag}
+                        <button onClick={() => removeEditTag(idx)} className="text-white/50">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Existing Attachments */}
+                  {editAttachments.existing.length > 0 && (
+                    <div className="mb-4">
+                      <h4 className="text-white font-medium mb-2">기존 첨부파일</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {editAttachments.existing
+                          .filter((att) => att.type === "image")
+                          .map((attachment) => (
+                            <div key={attachment.id} className="relative w-24 h-24 rounded-lg overflow-hidden">
+                              <img
+                                src={attachment.url || "/placeholder.svg"}
+                                alt={attachment.filename}
+                                className="w-full h-full object-cover"
+                              />
+                              <button
+                                onClick={() => removeExistingAttachment(attachment.id)}
+                                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-all"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+
+                        {editAttachments.existing
+                          .filter((att) => att.type === "audio")
+                          .map((attachment) => (
+                            <div key={attachment.id} className="rounded-xl bg-white/10 p-3">
+                              <div className="flex items-center gap-3">
+                                <button
+                                  onClick={() => playAudio(attachment.id, attachment.url)}
+                                  className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white"
+                                >
+                                  {playingAudio === attachment.id ? (
+                                    <Pause className="w-5 h-5" />
+                                  ) : (
+                                    <Play className="w-5 h-5" />
+                                  )}
+                                </button>
+                                <span className="text-white text-sm">{attachment.filename}</span>
+                                <button
+                                  onClick={() => removeExistingAttachment(attachment.id)}
+                                  className="text-white/50 hover:text-white transition-all"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* New Attachments */}
+                  <div className="flex gap-3 mb-4">
+                    <button
+                      onClick={() => setShowImageOptions(true)}
+                      className="flex-1 py-3 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/15 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Camera className="w-4 h-4" />
+                      <span className="text-sm">사진 추가</span>
+                    </button>
+                    <button
+                      onClick={isRecording ? stopRecording : startRecording}
+                      className={`flex-1 py-3 rounded-xl border text-white hover:bg-white/15 transition-all flex items-center justify-center gap-2 ${
+                        isRecording ? "bg-red-500/20 border-red-500/30" : "bg-white/10 border-white/20"
+                      }`}
+                    >
+                      <Mic className="w-4 h-4" />
+                      <span className="text-sm">{isRecording ? "녹음 중..." : "음성 추가"}</span>
+                    </button>
+                  </div>
+
+                  {/* Edit Action Buttons */}
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleEdit}
+                      className="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-purple-500 text-white font-medium"
+                    >
+                      저장
+                    </button>
+                    <button
+                      onClick={() => handleDelete(selectedMemo.id)}
+                      className="flex-1 py-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 font-medium hover:bg-red-500/30 transition-all"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Category */}
+                  {selectedMemo.category && (
+                    <div className="flex items-center gap-3 mb-4">
+                      {(() => {
+                        const category =
+                          categories[selectedMemo.category || "uncategorized"] || CATEGORIES.uncategorized
+                        return (
+                          <>
+                            <div
+                              className={`w-10 h-10 rounded-full ${category.bgColor} flex items-center justify-center flex-shrink-0`}
+                              style={{ color: category.color }}
+                            >
+                              {category.icon}
+                            </div>
+                            <div>
+                              <h4 className="text-white font-medium">{category.name}</h4>
+                              {selectedMemo.category_confidence && (
+                                <p className="text-white/60 text-sm">
+                                  정확도: {Math.round(selectedMemo.category_confidence * 100)}%
+                                </p>
+                              )}
+                            </div>
+                          </>
+                        )
+                      })()}
+                    </div>
+                  )}
+
+                  {/* Content */}
+                  <p className="text-white text-base leading-relaxed mb-4">{selectedMemo.content}</p>
+
+                  {/* Attachments */}
+                  {selectedMemo.attachments.length > 0 && (
+                    <div className="mb-4">
+                      {selectedMemo.attachments
+                        .filter((att) => att.type === "image")
+                        .map((attachment) => (
+                          <div key={attachment.id} className="rounded-xl overflow-hidden mb-2">
+                            <img
+                              src={attachment.url || "/placeholder.svg"}
+                              alt={attachment.filename}
+                              className="w-full max-h-64 object-cover"
+                            />
+                          </div>
+                        ))}
+
+                      {selectedMemo.attachments
+                        .filter((att) => att.type === "audio")
+                        .map((attachment) => (
+                          <div key={attachment.id} className="rounded-xl bg-white/10 p-3 mb-2">
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => playAudio(attachment.id, attachment.url)}
+                                className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white"
+                              >
+                                {playingAudio === attachment.id ? (
+                                  <Pause className="w-5 h-5" />
+                                ) : (
+                                  <Play className="w-5 h-5" />
+                                )}
+                              </button>
+                              <span className="text-white text-sm">{attachment.filename}</span>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+
+                  {/* Tags */}
+                  {selectedMemo.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-6">
+                      {selectedMemo.tags.map((tag, idx) => (
+                        <span key={idx} className="text-sm px-3 py-1 rounded-full bg-white/20 text-white">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Edit Button */}
+                  <button
+                    onClick={() => {
+                      setIsEditing(true)
+                      setEditText(selectedMemo.content)
+                      setEditTags(selectedMemo.tags)
+                      setEditAttachments({
+                        existing: selectedMemo.attachments,
+                        newImages: [],
+                        newAudios: [],
+                      })
+                    }}
+                    className="w-full py-3 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/15 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    메모 수정
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Image Options Modal */}
+        {showImageOptions && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="w-full max-w-md mx-auto backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl p-6">
+              <h3 className="text-lg font-medium text-white mb-4">사진 추가 방법</h3>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => {
+                    fileInputRef.current?.click()
+                    setShowImageOptions(false)
+                  }}
+                  className="flex-1 py-3 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/15 transition-all"
+                >
+                  갤러리에서 선택
+                </button>
+                <button
+                  onClick={() => {
+                    cameraInputRef.current?.click()
+                    setShowImageOptions(false)
+                  }}
+                  className="flex-1 py-3 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/15 transition-all"
+                >
+                  카메라로 촬영
+                </button>
+              </div>
+              <button
+                onClick={() => setShowImageOptions(false)}
+                className="w-full py-3 rounded-xl text-white/70 hover:bg-white/5 transition-all mt-4"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Category Management Modal */}
         <CategoryManagement

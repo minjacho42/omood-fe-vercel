@@ -3,37 +3,15 @@
 import type React from "react"
 
 import { useEffect, useState, useRef, useMemo } from "react"
-import {
-  Plus,
-  Search,
-  Edit3,
-  BookOpen,
-  ShoppingCart,
-  Lightbulb,
-  Briefcase,
-  Heart,
-  Mic,
-  Calendar,
-  Settings,
-  LogOut,
-  User,
-  ChevronLeft,
-  ChevronRight,
-  ChevronDown,
-  ChevronUp,
-  Sparkles,
-  BarChart3,
-  Grid3X3,
-  Clock,
-  X,
-  Camera,
-  Pause,
-  Play,
-  Trash2,
-  ZoomIn,
-} from "lucide-react"
+import { Plus, Search, Edit3, BookOpen, ShoppingCart, Lightbulb, Briefcase, Heart, Mic, Calendar, Settings, LogOut, User, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Sparkles, BarChart3, Grid3X3, Clock, X, Camera, Pause, Play, Trash2, ZoomIn, Timer, CheckCircle, Coffee, TrendingUp, ArrowRight } from 'lucide-react'
 import AuthGuard from "@/components/auth-guard"
 import CategoryManagement from "@/components/category-management"
+import { CircularTimer } from "@/components/circular-timer"
+import { SessionProgressCircle } from "@/components/session-progress-circle"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Textarea } from "@/components/ui/textarea"
 
 interface MemoAttachment {
   id: string
@@ -53,6 +31,24 @@ interface Memo {
   category?: string
   category_confidence?: number
   is_archived?: boolean
+}
+
+interface PomodoroSession {
+  id: string
+  subject: string
+  goal: string
+  duration: number
+  breakDuration: number
+  tags: string[]
+  startTime: Date
+  endTime?: Date
+  reflection?: {
+    summary: string
+    blockers: string
+    insights: string
+    nextGoal: string
+  }
+  completed: boolean
 }
 
 interface DailySummary {
@@ -108,6 +104,7 @@ const CATEGORIES: Record<string, CategoryConfig> = {
 }
 
 type ViewMode = "daily" | "weekly" | "monthly"
+type AppMode = "memo" | "session"
 
 // Helper function to convert Date to local YYYY-MM-DD string
 const formatLocalDate = (date: Date): string => {
@@ -122,6 +119,12 @@ const convertUtcToLocalDate = (utcDatetime: string, timeZone: string): string =>
   const utcDate = utcDatetime.endsWith("Z") ? new Date(utcDatetime) : new Date(utcDatetime + "Z")
   const localDate = new Date(utcDate.toLocaleString("en-US", { timeZone }))
   return formatLocalDate(localDate)
+}
+
+const getBreakDuration = (focusMinutes: number): number => {
+  if (focusMinutes <= 25) return 5
+  if (focusMinutes <= 45) return 10
+  return 15
 }
 
 // Simple markdown renderer component
@@ -249,7 +252,10 @@ const ImageModal: React.FC<{
   )
 }
 
-function MemoApp() {
+function MemoSessionApp() {
+  // App mode state
+  const [appMode, setAppMode] = useState<AppMode>("memo")
+
   // Preview expansion state for memo cards
   const [expandedPreviews, setExpandedPreviews] = useState<string[]>([])
   const toggleExpand = (id: string) => {
@@ -328,6 +334,29 @@ function MemoApp() {
 
   // Categories states
   const [categories, setCategories] = useState<Record<string, CategoryConfig>>(CATEGORIES)
+
+  // 카테고리 선택 상태
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [editSelectedCategory, setEditSelectedCategory] = useState<string | null>(null)
+  const [showCategorySelector, setShowCategorySelector] = useState(false)
+  const [showEditCategorySelector, setShowEditCategorySelector] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState("")
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false)
+  const [showEditNewCategoryInput, setShowEditNewCategoryInput] = useState(false)
+
+  // Pomodoro session states
+  const [currentPhase, setCurrentPhase] = useState<"setup" | "focus" | "reflection" | "break">("setup")
+  const [showStats, setShowStats] = useState(false)
+  const [currentSession, setCurrentSession] = useState<PomodoroSession | null>(null)
+  const [timeLeft, setTimeLeft] = useState(0)
+  const [isRunning, setIsRunning] = useState(false)
+  const [sessions, setSessions] = useState<PomodoroSession[]>([])
+  
+  // Reflection form states
+  const [summary, setSummary] = useState("")
+  const [blockers, setBlockers] = useState("")
+  const [insights, setInsights] = useState("")
+  const [nextGoal, setNextGoal] = useState("")
 
   // Common API call function with 401 handling
   const apiCall = async (url: string, options: RequestInit = {}) => {
@@ -424,8 +453,46 @@ function MemoApp() {
 
   useEffect(() => {
     if (!timeZone) return
-    fetchData()
-  }, [timeZone, viewMode, currentDate, categoryFilter])
+    if (appMode === "memo") {
+      fetchData()
+    }
+  }, [timeZone, viewMode, currentDate, categoryFilter, appMode])
+
+  // Load session data from localStorage
+  useEffect(() => {
+    const savedSessions = localStorage.getItem("pomodoro-sessions")
+    if (savedSessions) {
+      setSessions(JSON.parse(savedSessions))
+    }
+  }, [])
+
+  // Save session data to localStorage
+  useEffect(() => {
+    localStorage.setItem("pomodoro-sessions", JSON.stringify(sessions))
+  }, [sessions])
+
+  // Timer logic
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null
+    
+    if (isRunning && timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft(timeLeft - 1)
+      }, 1000)
+    } else if (timeLeft === 0 && isRunning) {
+      setIsRunning(false)
+      if (currentPhase === "focus") {
+        setCurrentPhase("reflection")
+      } else if (currentPhase === "break") {
+        setCurrentPhase("setup")
+        resetSession()
+      }
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [isRunning, timeLeft, currentPhase])
 
   useEffect(() => {
     let ticking = false
@@ -606,6 +673,42 @@ function MemoApp() {
     }
   }
 
+  const createNewCategory = async (name: string, isForEdit = false) => {
+    if (!name.trim()) return
+
+    try {
+      const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/categories/custom`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: name.toLowerCase().replace(/\s+/g, "_"),
+          name: name.trim(),
+          description: `사용자 정의 카테고리: ${name.trim()}`,
+          icon: "lightbulb",
+          color: "#F59E0B",
+        }),
+      })
+
+      if (res && res.ok) {
+        const newCategory = await res.json()
+        await fetchCustomCategories()
+
+        if (isForEdit) {
+          setEditSelectedCategory(newCategory.key)
+          setShowEditNewCategoryInput(false)
+          setShowEditCategorySelector(false)
+        } else {
+          setSelectedCategory(newCategory.key)
+          setShowNewCategoryInput(false)
+          setShowCategorySelector(false)
+        }
+        setNewCategoryName("")
+      }
+    } catch (err) {
+      console.error("Failed to create category:", err)
+    }
+  }
+
   const handleSubmit = async () => {
     if (!inputText.trim()) return
 
@@ -614,6 +717,11 @@ function MemoApp() {
     const formData = new FormData()
     formData.append("content", inputText)
     formData.append("tags", allTags.join(","))
+
+    // 선택된 카테고리 추가
+    if (selectedCategory) {
+      formData.append("category", selectedCategory)
+    }
 
     // Add image attachments with proper naming convention
     inputAttachments.images.forEach((file, index) => {
@@ -651,6 +759,11 @@ function MemoApp() {
     const formData = new FormData()
     formData.append("content", editText)
     formData.append("tags", allEditTags.join(","))
+
+    // 선택된 카테고리 추가
+    if (editSelectedCategory !== null) {
+      formData.append("category", editSelectedCategory)
+    }
 
     editAttachments.newImages.forEach((file, index) => {
       formData.append(`new_image_${index}`, file)
@@ -690,6 +803,82 @@ function MemoApp() {
     } catch (err) {
       console.error("Delete failed:", err)
     }
+  }
+
+  // Pomodoro session functions
+  const startSession = (sessionData: { subject: string; goal: string; duration: number; tags: string[] }) => {
+    const breakDuration = getBreakDuration(sessionData.duration)
+    
+    const newSession: PomodoroSession = {
+      id: Date.now().toString(),
+      subject: sessionData.subject,
+      goal: sessionData.goal,
+      duration: sessionData.duration,
+      breakDuration,
+      tags: sessionData.tags,
+      startTime: new Date(),
+      completed: false
+    }
+    
+    setCurrentSession(newSession)
+    setTimeLeft(sessionData.duration * 60)
+    setCurrentPhase("focus")
+    setIsRunning(false)
+  }
+
+  const toggleTimer = () => {
+    setIsRunning(!isRunning)
+  }
+
+  const resetTimer = () => {
+    setIsRunning(false)
+    if (currentSession) {
+      if (currentPhase === "focus") {
+        setTimeLeft(currentSession.duration * 60)
+      } else if (currentPhase === "break") {
+        setTimeLeft(currentSession.breakDuration * 60)
+      }
+    }
+  }
+
+  const completeReflection = () => {
+    if (!currentSession) return
+    
+    const completedSession: PomodoroSession = {
+      ...currentSession,
+      endTime: new Date(),
+      reflection: {
+        summary,
+        blockers,
+        insights,
+        nextGoal
+      },
+      completed: true
+    }
+    
+    setSessions(prev => [...prev, completedSession])
+    
+    // Start break
+    setTimeLeft(currentSession.breakDuration * 60)
+    setCurrentPhase("break")
+    setIsRunning(true)
+    
+    // Clear reflection form
+    setSummary("")
+    setBlockers("")
+    setInsights("")
+    setNextGoal("")
+  }
+
+  const resetSession = () => {
+    setCurrentSession(null)
+    setTimeLeft(0)
+  }
+
+  const cancelCurrentTask = () => {
+    setIsRunning(false)
+    setCurrentPhase("setup")
+    resetSession()
   }
 
   const startRecording = async () => {
@@ -813,6 +1002,10 @@ function MemoApp() {
     setCurrentTag("")
     setInputAttachments({ images: [], audios: [] })
     setShowImageOptions(false)
+    setSelectedCategory(null)
+    setShowCategorySelector(false)
+    setNewCategoryName("")
+    setShowNewCategoryInput(false)
   }
 
   const resetDetailState = () => {
@@ -822,6 +1015,9 @@ function MemoApp() {
     setEditTags([])
     setEditCurrentTag("")
     setEditAttachments({ existing: [], newImages: [], newAudios: [] })
+    setEditSelectedCategory(null)
+    setShowEditCategorySelector(false)
+    setShowEditNewCategoryInput(false)
   }
 
   const addTag = () => {
@@ -888,15 +1084,13 @@ function MemoApp() {
     }
   }
 
-  // Categories present in current memos
   const memoCategories = useMemo(() => {
-    const cats = memos.map((m) => m.category || "uncategorized")
+    const cats = memos.map((m) => m.category).filter(Boolean)
     return Array.from(new Set(cats))
   }, [memos])
 
   const filteredMemos = memos.filter((memo) => {
-    const memoKey = memo.category || "uncategorized"
-    if (categoryFilter && memoKey !== categoryFilter) {
+    if (categoryFilter && memo.category !== categoryFilter) {
       return false
     }
     if (searchQuery) {
@@ -908,21 +1102,6 @@ function MemoApp() {
     return true
   })
 
-  const updateMemoCategory = async (memoId: string, newCategory: string) => {
-    try {
-      const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/${memoId}/category`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: newCategory }),
-      })
-      if (res && res.ok) {
-        fetchData()
-      }
-    } catch (err) {
-      console.error("Update category failed:", err)
-    }
-  }
-
   // Helper function to truncate content at first line break
   const truncateAtLineBreak = (content: string, maxLength = 100) => {
     const firstLineBreak = content.indexOf("\n")
@@ -933,6 +1112,33 @@ function MemoApp() {
       return { text: content.substring(0, maxLength), truncated: true }
     }
     return { text: content, truncated: false }
+  }
+
+  const getTodayStats = () => {
+    const today = new Date().toDateString()
+    const todaySessions = sessions.filter(session => 
+      new Date(session.startTime).toDateString() === today && session.completed
+    )
+    
+    return {
+      totalFocusTime: todaySessions.reduce((acc, session) => acc + session.duration, 0),
+      sessionsCompleted: todaySessions.length,
+      sessions: todaySessions
+    }
+  }
+
+  const getWeeklyStats = () => {
+    const weekAgo = new Date()
+    weekAgo.setDate(weekAgo.getDate() - 7)
+    
+    const weekSessions = sessions.filter(session => 
+      new Date(session.startTime) >= weekAgo && session.completed
+    )
+    
+    return {
+      totalFocusTime: weekSessions.reduce((acc, session) => acc + session.duration, 0),
+      sessionsCompleted: weekSessions.length
+    }
   }
 
   const renderDailySummary = () => {
@@ -1025,7 +1231,7 @@ function MemoApp() {
   }
 
   const renderMemoCard = (memo: Memo) => {
-    const category = categories[memo.category || "uncategorized"] || CATEGORIES.uncategorized
+    const category = memo.category ? categories[memo.category] || CATEGORIES.uncategorized : null
     const utcCreated = memo.created_at.endsWith("Z") ? new Date(memo.created_at) : new Date(memo.created_at + "Z")
     const time = utcCreated.toLocaleString(locale, {
       timeZone,
@@ -1051,18 +1257,26 @@ function MemoApp() {
         {/* Header with category and time */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <div
-              className={`w-8 h-8 rounded-full ${category.bgColor} flex items-center justify-center flex-shrink-0`}
-              style={{ color: category.color }}
-            >
-              {category.icon}
-            </div>
-            <div>
-              <span className="text-sm font-medium text-white/90">{category.name}</span>
-              {memo.category_confidence && (
-                <span className="text-xs text-white/60 ml-2">{Math.round(memo.category_confidence * 100)}%</span>
-              )}
-            </div>
+            {category ? (
+              <>
+                <div
+                  className={`w-8 h-8 rounded-full ${category.bgColor} flex items-center justify-center flex-shrink-0`}
+                  style={{ color: category.color }}
+                >
+                  {category.icon}
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-white/90">{category.name}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-gray-500/20 flex items-center justify-center flex-shrink-0">
+                  <Clock className="w-4 h-4 text-gray-400" />
+                </div>
+                <span className="text-sm font-medium text-white/60">카테고리 없음</span>
+              </div>
+            )}
           </div>
           <span className="text-xs text-white/60">{time}</span>
         </div>
@@ -1384,10 +1598,123 @@ function MemoApp() {
     )
   }
 
+  // Session stats view
+  const renderSessionStats = () => {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">📊 생산성 통계</h1>
+            <Button onClick={() => setShowStats(false)} variant="outline">
+              <ArrowRight className="w-4 h-4 mr-2" />
+              타이머로 돌아가기
+            </Button>
+          </div>
+          
+          <div className="grid gap-6 md:grid-cols-2 mb-8">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Calendar className="w-4 h-4" />
+                  오늘의 성과
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">집중 시간</span>
+                    <span className="text-2xl font-bold">{getTodayStats().totalFocusTime}분</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">완료한 세션</span>
+                    <span className="text-2xl font-bold">{getTodayStats().sessionsCompleted}개</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <TrendingUp className="w-4 h-4" />
+                  주간 통계
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">총 집중 시간</span>
+                    <span className="text-2xl font-bold">{getWeeklyStats().totalFocusTime}분</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">총 세션 수</span>
+                    <span className="text-2xl font-bold">{getWeeklyStats().sessionsCompleted}개</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          
+          <Card>
+            <CardHeader>
+              <CardTitle>세션 기록</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {sessions.slice(-10).reverse().map(session => (
+                  <div key={session.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex items-center gap-3">
+                        <SessionProgressCircle duration={session.duration} size={50} />
+                        <div>
+                          <h3 className="font-semibold">{session.subject}</h3>
+                          <p className="text-sm text-muted-foreground">{session.goal}</p>
+                        </div>
+                      </div>
+                      <Badge variant="outline">{session.duration}분</Badge>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {session.tags.map(tag => (
+                        <Badge key={tag} variant="secondary" className="text-xs">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                    {session.reflection && (
+                      <div className="text-sm">
+                        <p><strong>완료:</strong> {session.reflection.summary}</p>
+                        {session.reflection.insights && (
+                          <p><strong>인사이트:</strong> {session.reflection.insights}</p>
+                        )}
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {new Date(session.startTime).toLocaleString()}
+                    </p>
+                  </div>
+                ))}
+                {sessions.length === 0 && (
+                  <p className="text-center text-muted-foreground py-8">
+                    아직 완료된 세션이 없습니다. 첫 포모도로를 시작해보세요!
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
   // For sticky search bar position
   const headerHeight = isScrolled ? 48 : 64
   if (typeof document !== "undefined") {
     document.documentElement.style.setProperty("--header-height", `${headerHeight}px`)
+  }
+
+  // Show session stats if requested
+  if (showStats) {
+    return renderSessionStats()
   }
 
   return (
@@ -1407,39 +1734,70 @@ function MemoApp() {
               className={`transition-all duration-300 ${isScrolled ? "h-6" : "h-8"}`}
             />
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowInput(true)}
-                className={`rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white shadow-lg hover:scale-105 transition-all ${
-                  isScrolled ? "w-8 h-8" : "w-10 h-10"
-                }`}
-              >
-                <Plus className={`${isScrolled ? "w-4 h-4" : "w-5 h-5"}`} />
-              </button>
+              {/* App Mode Toggle */}
+              <div className="flex rounded-lg bg-white/10 p-1">
+                <button
+                  onClick={() => setAppMode("memo")}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                    appMode === "memo" ? "bg-white/20 text-white" : "text-white/70 hover:text-white"
+                  }`}
+                >
+                  <Edit3 className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => setAppMode("session")}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                    appMode === "session" ? "bg-white/20 text-white" : "text-white/70 hover:text-white"
+                  }`}
+                >
+                  <Timer className="w-3 h-3" />
+                </button>
+              </div>
 
-              <button
-                onClick={() => {
-                  const next = !inlineSearchActive
-                  setInlineSearchActive(next)
-                  if (!next) setSearchQuery("")
-                }}
-                className={`rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-all ${
-                  isScrolled ? "w-8 h-8" : "w-10 h-10"
-                }`}
-              >
-                <Search className={`${isScrolled ? "w-4 h-4" : "w-5 h-5"}`} />
-              </button>
+              {appMode === "memo" && (
+                <>
+                  <button
+                    onClick={() => setShowInput(true)}
+                    className={`rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white shadow-lg hover:scale-105 transition-all ${
+                      isScrolled ? "w-8 h-8" : "w-10 h-10"
+                    }`}
+                  >
+                    <Plus className={`${isScrolled ? "w-4 h-4" : "w-5 h-5"}`} />
+                  </button>
 
-              {inlineSearchActive && (
-                <div className="flex items-center transition-all duration-300 max-w-xs opacity-100">
-                  <input
-                    type="text"
-                    placeholder="Search memos..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-3 pr-2 py-1 rounded-lg bg-white/20 text-white placeholder-white/60 focus:outline-none"
-                    autoFocus
-                  />
-                </div>
+                  <button
+                    onClick={() => {
+                      const next = !inlineSearchActive
+                      setInlineSearchActive(next)
+                      if (!next) setSearchQuery("")
+                    }}
+                    className={`rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-all ${
+                      isScrolled ? "w-8 h-8" : "w-10 h-10"
+                    }`}
+                  >
+                    <Search className={`${isScrolled ? "w-4 h-4" : "w-5 h-5"}`} />
+                  </button>
+
+                  {inlineSearchActive && (
+                    <div className="flex items-center transition-all duration-300 max-w-xs opacity-100">
+                      <input
+                        type="text"
+                        placeholder="Search memos..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-3 pr-2 py-1 rounded-lg bg-white/20 text-white placeholder-white/60 focus:outline-none"
+                        autoFocus
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
+              {appMode === "session" && (
+                <Button onClick={() => setShowStats(true)} variant="outline" size="sm" className="text-white border-white/20">
+                  <TrendingUp className="w-4 h-4 mr-2" />
+                  통계
+                </Button>
               )}
 
               <div className="relative">
@@ -1483,125 +1841,219 @@ function MemoApp() {
             </div>
           </div>
 
-          {/* View Mode Navigation */}
-          <div className="mb-4">
-            <div className="flex gap-2">
-              <button
-                onClick={() => setViewMode("daily")}
-                className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                  viewMode === "daily" ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
-                }`}
-              >
-                <Calendar className="w-4 h-4" />
-                일간
-              </button>
-              <button
-                onClick={() => setViewMode("weekly")}
-                className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                  viewMode === "weekly" ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
-                }`}
-              >
-                <BarChart3 className="w-4 h-4" />
-                주간
-              </button>
-              <button
-                onClick={() => setViewMode("monthly")}
-                className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                  viewMode === "monthly" ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
-                }`}
-              >
-                <Grid3X3 className="w-4 h-4" />
-                월간
-              </button>
-            </div>
-          </div>
+          {/* Memo Mode Navigation */}
+          {appMode === "memo" && (
+            <>
+              {/* View Mode Navigation */}
+              <div className="mb-4">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setViewMode("daily")}
+                    className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                      viewMode === "daily" ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    <Calendar className="w-4 h-4" />
+                    일간
+                  </button>
+                  <button
+                    onClick={() => setViewMode("weekly")}
+                    className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                      viewMode === "weekly" ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                    주간
+                  </button>
+                  <button
+                    onClick={() => setViewMode("monthly")}
+                    className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                      viewMode === "monthly" ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    <Grid3X3 className="w-4 h-4" />
+                    월간
+                  </button>
+                </div>
+              </div>
 
-          {/* Date Navigation */}
-          <div className="flex items-center justify-between mb-4">
-            <button
-              onClick={() => navigateDate("prev")}
-              className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-all"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-
-            <div className="text-center">
-              <h2 className="text-white font-semibold text-lg">{formatDateHeader()}</h2>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={goToToday}
-                className="px-3 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20 transition-all"
-              >
-                오늘
-              </button>
-              <button
-                onClick={() => navigateDate("next")}
-                className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-all"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Category Filter - only show in daily view */}
-          {viewMode === "daily" && (
-            <div
-              className={`transition-all duration-300 overflow-hidden ${
-                isScrolled ? "max-h-0 opacity-0" : "max-h-96 opacity-100"
-              }`}
-            >
-              <div className="flex gap-2 overflow-x-auto pb-2">
+              {/* Date Navigation */}
+              <div className="flex items-center justify-between mb-4">
                 <button
-                  onClick={() => setCategoryFilter(null)}
-                  className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-                    categoryFilter === null ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
+                  onClick={() => navigateDate("prev")}
+                  className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-all"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+
+                <div className="text-center">
+                  <h2 className="text-white font-semibold text-lg">{formatDateHeader()}</h2>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={goToToday}
+                    className="px-3 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20 transition-all"
+                  >
+                    오늘
+                  </button>
+                  <button
+                    onClick={() => navigateDate("next")}
+                    className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-all"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Category Filter - only show in daily view */}
+              {viewMode === "daily" && (
+                <div
+                  className={`transition-all duration-300 overflow-hidden ${
+                    isScrolled ? "max-h-0 opacity-0" : "max-h-96 opacity-100"
                   }`}
                 >
-                  전체
-                </button>
-                {memoCategories.map((key) => {
-                  const config = categories[key] || CATEGORIES.uncategorized
-                  return (
+                  <div className="flex gap-2 overflow-x-auto pb-2">
                     <button
-                      key={key}
-                      onClick={() => setCategoryFilter(key)}
-                      className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
-                        categoryFilter === key ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
+                      onClick={() => setCategoryFilter(null)}
+                      className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+                        categoryFilter === null ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
                       }`}
                     >
-                      {config.icon}
-                      {config.name}
+                      전체
                     </button>
-                  )
-                })}
-              </div>
-            </div>
+                    {memoCategories.map((key) => {
+                      const config = categories[key] || CATEGORIES.uncategorized
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => setCategoryFilter(key)}
+                          className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                            categoryFilter === key ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
+                          }`}
+                        >
+                          {config.icon}
+                          {config.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 
         {/* Content */}
         <div className="p-4 pb-32">
-          {viewMode === "daily" && (
+          {appMode === "memo" ? (
             <>
-              {renderDailySummary()}
-              {filteredMemos.length === 0 && memos.length > 0 ? (
-                <div className="text-center py-20">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/10 flex items-center justify-center">
-                    <Search className="w-8 h-8 text-white/50" />
-                  </div>
-                  <p className="text-white/70 text-lg mb-2">검색 결과가 없습니다</p>
-                  <p className="text-white/50 text-sm">다른 검색어나 필터를 시도해보세요</p>
-                </div>
-              ) : (
-                memos.length > 0 && <div className="space-y-4">{filteredMemos.map(renderMemoCard)}</div>
+              {viewMode === "daily" && (
+                <>
+                  {renderDailySummary()}
+                  {filteredMemos.length === 0 && memos.length > 0 ? (
+                    <div className="text-center py-20">
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/10 flex items-center justify-center">
+                        <Search className="w-8 h-8 text-white/50" />
+                      </div>
+                      <p className="text-white/70 text-lg mb-2">검색 결과가 없습니다</p>
+                      <p className="text-white/50 text-sm">다른 검색어나 필터를 시도해보세요</p>
+                    </div>
+                  ) : (
+                    memos.length > 0 && <div className="space-y-4">{filteredMemos.map(renderMemoCard)}</div>
+                  )}
+                </>
               )}
-            </>
-          )}
 
-          {viewMode === "weekly" && renderWeeklyView()}
-          {viewMode === "monthly" && renderMonthlyView()}
+              {viewMode === "weekly" && renderWeeklyView()}
+              {viewMode === "monthly" && renderMonthlyView()}
+            </>
+          ) : (
+            /* Session Mode Content */
+            <div className="container mx-auto max-w-md">
+              <div className="text-center mb-6">
+                <h1 className="text-3xl font-bold text-white mb-2">🍅 포모도로</h1>
+              </div>
+
+              {/* Main Timer */}
+              <CircularTimer
+                duration={currentSession?.duration || 25}
+                timeLeft={timeLeft}
+                isRunning={isRunning}
+                isBreak={currentPhase === "break"}
+                onToggle={toggleTimer}
+                onReset={resetTimer}
+                onCancel={currentPhase !== "setup" ? cancelCurrentTask : undefined}
+                sessionTitle={currentSession?.subject}
+                sessionGoal={currentSession?.goal}
+                sessionTags={currentSession?.tags}
+                sessionStartTime={currentSession?.startTime}
+                onStartSession={startSession}
+              />
+
+              {/* Reflection Form */}
+              {currentPhase === "reflection" && (
+                <div className="mt-6 backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <CheckCircle className="w-5 h-5 text-white" />
+                    <h3 className="text-lg font-medium text-white">세션 회고</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label htmlFor="summary" className="text-base font-semibold text-white">완료한 일</label>
+                      <Textarea
+                        id="summary"
+                        placeholder="예: DB 연결 재설정 완료, env 분리 진행 중"
+                        value={summary}
+                        onChange={(e) => setSummary(e.target.value)}
+                        rows={2}
+                        className="w-full p-3 border border-white/20 rounded-lg resize-none bg-white/10 text-white placeholder-white/60"
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label htmlFor="blockers" className="text-base font-semibold text-white">막힌 점</label>
+                      <Textarea
+                        id="blockers"
+                        placeholder="어떤 부분에서 어려움을 겪었나요?"
+                        value={blockers}
+                        onChange={(e) => setBlockers(e.target.value)}
+                        rows={2}
+                        className="w-full p-3 border border-white/20 rounded-lg resize-none bg-white/10 text-white placeholder-white/60"
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label htmlFor="insights" className="text-base font-semibold text-white">인사이트</label>
+                      <Textarea
+                        id="insights"
+                        placeholder="새롭게 알게 된 것이나 깨달은 점이 있나요?"
+                        value={insights}
+                        onChange={(e) => setInsights(e.target.value)}
+                        rows={2}
+                        className="w-full p-3 border border-white/20 rounded-lg resize-none bg-white/10 text-white placeholder-white/60"
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label htmlFor="nextGoal" className="text-base font-semibold text-white">다음 목표</label>
+                      <input
+                        id="nextGoal"
+                        placeholder="다음에는 무엇을 할 예정인가요?"
+                        value={nextGoal}
+                        onChange={(e) => setNextGoal(e.target.value)}
+                        className="w-full p-3 border border-white/20 rounded-lg bg-white/10 text-white placeholder-white/60"
+                      />
+                    </div>
+                    
+                    <Button onClick={completeReflection} className="w-full" size="lg">
+                      회고 완료 & 휴식 시작
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Input Modal */}
@@ -1657,6 +2109,104 @@ function MemoApp() {
                   ))}
                 </div>
               )}
+
+              {/* Category Selection */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-white/80 text-sm">카테고리</label>
+                  <button
+                    onClick={() => setShowCategorySelector(!showCategorySelector)}
+                    className="text-blue-400 text-sm hover:text-blue-300"
+                  >
+                    {selectedCategory ? categories[selectedCategory]?.name || "선택됨" : "선택하기"}
+                  </button>
+                </div>
+
+                {selectedCategory && (
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-white/10">
+                    <div
+                      className={`w-6 h-6 rounded-full ${categories[selectedCategory]?.bgColor} flex items-center justify-center`}
+                      style={{ color: categories[selectedCategory]?.color }}
+                    >
+                      {categories[selectedCategory]?.icon}
+                    </div>
+                    <span className="text-white text-sm">{categories[selectedCategory]?.name}</span>
+                    <button
+                      onClick={() => setSelectedCategory(null)}
+                      className="ml-auto text-white/50 hover:text-white"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
+                {showCategorySelector && (
+                  <div className="mt-2 p-3 rounded-xl bg-white/5 border border-white/10">
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {Object.entries(categories).map(([key, config]) => (
+                        <button
+                          key={key}
+                          onClick={() => {
+                            setSelectedCategory(key)
+                            setShowCategorySelector(false)
+                          }}
+                          className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 transition-all"
+                        >
+                          <div
+                            className={`w-6 h-6 rounded-full ${config.bgColor} flex items-center justify-center`}
+                            style={{ color: config.color }}
+                          >
+                            {config.icon}
+                          </div>
+                          <span className="text-white text-sm">{config.name}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="mt-3 pt-3 border-t border-white/10">
+                      {showNewCategoryInput ? (
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="새 카테고리 이름"
+                            value={newCategoryName}
+                            onChange={(e) => setNewCategoryName(e.target.value)}
+                            className="flex-1 px-3 py-2 rounded-lg bg-white/10 text-white placeholder-white/60 text-sm"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                createNewCategory(newCategoryName, false)
+                              }
+                            }}
+                          />
+                          <button
+                            onClick={() => createNewCategory(newCategoryName, false)}
+                            className="px-3 py-2 rounded-lg bg-blue-500 text-white text-sm"
+                          >
+                            추가
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowNewCategoryInput(false)
+                              setNewCategoryName("")
+                            }}
+                            className="px-3 py-2 rounded-lg bg-white/10 text-white text-sm"
+                          >
+                            취소
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setShowNewCategoryInput(true)}
+                          className="w-full flex items-center justify-center gap-2 p-2 rounded-lg bg-white/10 text-white/80 hover:bg-white/15 transition-all"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span className="text-sm">새 카테고리 만들기</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Attachments Preview */}
               {(inputAttachments.images.length > 0 || inputAttachments.audios.length > 0) && (
@@ -1796,6 +2346,104 @@ function MemoApp() {
                         </button>
                       </div>
                     ))}
+                  </div>
+
+                  {/* Edit Category Selection */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-white/80 text-sm">카테고리</label>
+                      <button
+                        onClick={() => setShowEditCategorySelector(!showEditCategorySelector)}
+                        className="text-blue-400 text-sm hover:text-blue-300"
+                      >
+                        {editSelectedCategory ? categories[editSelectedCategory]?.name || "선택됨" : "선택하기"}
+                      </button>
+                    </div>
+
+                    {editSelectedCategory && (
+                      <div className="flex items-center gap-2 p-2 rounded-lg bg-white/10">
+                        <div
+                          className={`w-6 h-6 rounded-full ${categories[editSelectedCategory]?.bgColor} flex items-center justify-center`}
+                          style={{ color: categories[editSelectedCategory]?.color }}
+                        >
+                          {categories[editSelectedCategory]?.icon}
+                        </div>
+                        <span className="text-white text-sm">{categories[editSelectedCategory]?.name}</span>
+                        <button
+                          onClick={() => setEditSelectedCategory(null)}
+                          className="ml-auto text-white/50 hover:text-white"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
+                    {showEditCategorySelector && (
+                      <div className="mt-2 p-3 rounded-xl bg-white/5 border border-white/10">
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                          {Object.entries(categories).map(([key, config]) => (
+                            <button
+                              key={key}
+                              onClick={() => {
+                                setEditSelectedCategory(key)
+                                setShowEditCategorySelector(false)
+                              }}
+                              className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 transition-all"
+                            >
+                              <div
+                                className={`w-6 h-6 rounded-full ${config.bgColor} flex items-center justify-center`}
+                                style={{ color: config.color }}
+                              >
+                                {config.icon}
+                              </div>
+                              <span className="text-white text-sm">{config.name}</span>
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="mt-3 pt-3 border-t border-white/10">
+                          {showEditNewCategoryInput ? (
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                placeholder="새 카테고리 이름"
+                                value={newCategoryName}
+                                onChange={(e) => setNewCategoryName(e.target.value)}
+                                className="flex-1 px-3 py-2 rounded-lg bg-white/10 text-white placeholder-white/60 text-sm"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    createNewCategory(newCategoryName, true)
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={() => createNewCategory(newCategoryName, true)}
+                                className="px-3 py-2 rounded-lg bg-blue-500 text-white text-sm"
+                              >
+                                추가
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowEditNewCategoryInput(false)
+                                  setNewCategoryName("")
+                                }}
+                                className="px-3 py-2 rounded-lg bg-white/10 text-white text-sm"
+                              >
+                                취소
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setShowEditNewCategoryInput(true)}
+                              className="w-full flex items-center justify-center gap-2 p-2 rounded-lg bg-white/10 text-white/80 hover:bg-white/15 transition-all"
+                            >
+                              <Plus className="w-4 h-4" />
+                              <span className="text-sm">새 카테고리 만들기</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Existing Attachments */}
@@ -2083,6 +2731,7 @@ function MemoApp() {
                       setIsEditing(true)
                       setEditText(selectedMemo.content)
                       setEditTags(selectedMemo.tags)
+                      setEditSelectedCategory(selectedMemo.category || null)
                       setEditAttachments({
                         existing: selectedMemo.attachments,
                         newImages: [],
@@ -2189,7 +2838,7 @@ function MemoApp() {
 export default function HomePage() {
   return (
     <AuthGuard>
-      <MemoApp />
+      <MemoSessionApp />
     </AuthGuard>
   )
 }

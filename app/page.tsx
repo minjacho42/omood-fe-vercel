@@ -361,7 +361,7 @@ function MemoSessionApp() {
   const [timeLeft, setTimeLeft] = useState(0)
   const [isRunning, setIsRunning] = useState(false)
   const [sessions, setSessions] = useState<PomodoroSession[]>([])
-  
+
   // Session reflection states
   const [sessionReflections, setSessionReflections] = useState<{ [sessionId: string]: string }>({})
 
@@ -458,7 +458,7 @@ function MemoSessionApp() {
       if (res && res.ok) {
         const data = await res.json()
         const backendSessions = data.sessions || []
-        
+
         // Convert backend sessions to frontend format
         const convertedSessions = backendSessions.map((session: any) => ({
           ...session,
@@ -466,7 +466,7 @@ function MemoSessionApp() {
           created_at: new Date(session.created_at),
           updated_at: new Date(session.updated_at),
         }))
-        
+
         setSessions(convertedSessions)
       }
     } catch (err) {
@@ -487,7 +487,8 @@ function MemoSessionApp() {
           break_duration: session.break_duration,
           tags: session.tags,
           status: session.status,
-          completed: session.completed
+          completed: session.completed,
+          created_at: session.created_at.toISOString(),
         }),
       })
 
@@ -510,6 +511,7 @@ function MemoSessionApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status,
+          updated_at: new Date().toISOString(),
         }),
       })
 
@@ -594,7 +596,7 @@ function MemoSessionApp() {
   // Timer logic for current session
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null
-    
+
     if (isRunning && timeLeft > 0 && currentSession) {
       interval = setInterval(() => {
         setTimeLeft(prev => prev - 1)
@@ -613,7 +615,7 @@ function MemoSessionApp() {
         setTimeLeft(0)
       }
     }
-    
+
     return () => {
       if (interval) clearInterval(interval)
     }
@@ -996,7 +998,7 @@ function MemoSessionApp() {
   const startSession = async (sessionData: { subject: string; goal: string; duration: number; tags: string[] }) => {
     const breakDuration = getBreakDuration(sessionData.duration)
     const sessionId = generateUUID()
-    
+
     const newSession: PomodoroSession = {
       id: sessionId,
       user_id: user?.email || '',
@@ -1010,7 +1012,7 @@ function MemoSessionApp() {
       status: 'pending',
       completed: false
     }
-    
+
     setCurrentSession(newSession)
     setTimeLeft(sessionData.duration * 60)
     setCurrentPhase("focus")
@@ -1022,20 +1024,20 @@ function MemoSessionApp() {
 
   const toggleTimer = async () => {
     if (!currentSession) return
-    
+
     const newRunningState = !isRunning
     setIsRunning(newRunningState)
-    
+
     if (newRunningState) {
       // Starting timer
       const newStatus = currentSession.status === 'pending' ? 'started' : 'started'
       await updateSessionStatus(currentSession.id, newStatus)
-      
+
       // Update started_at if this is the first start
       if (currentSession.status === 'pending') {
-        setCurrentSession(prev => prev ? { 
-          ...prev, 
-          status: 'started', 
+        setCurrentSession(prev => prev ? {
+          ...prev,
+          status: 'started',
           started_at: new Date(),
           updated_at: new Date()
         } : null)
@@ -1043,15 +1045,23 @@ function MemoSessionApp() {
     } else {
       // Pausing timer
       await updateSessionStatus(currentSession.id, 'paused')
-      setCurrentSession(prev => prev ? { 
-        ...prev, 
+      setCurrentSession(prev => prev ? {
+        ...prev,
         status: 'paused',
         updated_at: new Date()
       } : null)
     }
   }
 
-  const resetTimer = () => {
+  const resetTimer = async () => {
+    if (currentSession) {
+      await updateSessionStatus(currentSession.id, 'pending')
+      setCurrentSession(prev => prev ? {
+        ...prev,
+        status: 'pending',
+        updated_at: new Date()
+      } : null)
+    }
     setIsRunning(false)
     if (currentSession) {
       if (currentPhase === "focus") {
@@ -1067,7 +1077,7 @@ function MemoSessionApp() {
       // Update session status to cancelled
       await updateSessionStatus(currentSession.id, 'cancelled')
     }
-    
+
     setIsRunning(false)
     setCurrentPhase("setup")
     setCurrentSession(null)
@@ -1077,9 +1087,9 @@ function MemoSessionApp() {
   const handleReflectionSubmit = async (sessionId: string) => {
     const reflection = sessionReflections[sessionId]
     if (!reflection?.trim()) return
-    
+
     await updateSessionReflection(sessionId, reflection.trim())
-    
+
     // Clear the reflection input
     setSessionReflections(prev => {
       const newReflections = { ...prev }
@@ -1324,11 +1334,11 @@ function MemoSessionApp() {
   // Session statistics functions
   const getTodayStats = () => {
     const today = formatLocalDate(currentDate)
-    const todaySessions = sessions.filter(session => 
+    const todaySessions = sessions.filter(session =>
       formatLocalDate(new Date(session.created_at)) === today
     )
     const completedSessions = todaySessions.filter(s => s.completed)
-    
+
     return {
       totalFocusTime: completedSessions.reduce((acc, session) => acc + session.duration, 0),
       sessionsCompleted: completedSessions.length,
@@ -1342,13 +1352,13 @@ function MemoSessionApp() {
     startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
     const endOfWeek = new Date(startOfWeek)
     endOfWeek.setDate(startOfWeek.getDate() + 6)
-    
+
     const weekSessions = sessions.filter(session => {
       const sessionDate = new Date(session.created_at)
       return sessionDate >= startOfWeek && sessionDate <= endOfWeek
     })
     const completedSessions = weekSessions.filter(s => s.completed)
-    
+
     return {
       totalFocusTime: completedSessions.reduce((acc, session) => acc + session.duration, 0),
       sessionsCompleted: completedSessions.length,
@@ -1362,13 +1372,13 @@ function MemoSessionApp() {
     const month = currentDate.getMonth()
     const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
-    
+
     const monthSessions = sessions.filter(session => {
       const sessionDate = new Date(session.created_at)
       return sessionDate >= firstDay && sessionDate <= lastDay
     })
     const completedSessions = monthSessions.filter(s => s.completed)
-    
+
     return {
       totalFocusTime: completedSessions.reduce((acc, session) => acc + session.duration, 0),
       sessionsCompleted: completedSessions.length,
@@ -1784,7 +1794,7 @@ function MemoSessionApp() {
         <div className="mb-4">
           <h3 className="text-white font-semibold mb-2">{session.subject}</h3>
           {session.goal && <p className="text-white/80 text-sm mb-3">{session.goal}</p>}
-          
+
           <div className="flex items-center gap-4 mb-3">
             <div className="flex items-center gap-2">
               <SessionProgressCircle duration={session.duration} size={32} />
@@ -1864,7 +1874,7 @@ function MemoSessionApp() {
       <div className="space-y-4">
         {/* Weekly Summary */}
         {appMode === "session" && renderSessionWeeklySummary()}
-        
+
         {weekDays.map((day, index) => {
           const dateStr = formatLocalDate(day)
           const dayName = day.toLocaleDateString(locale, { weekday: "short" })
@@ -1873,7 +1883,7 @@ function MemoSessionApp() {
 
           if (appMode === "memo") {
             const dayMemos = weeklyData[dateStr] || []
-            
+
             // Group memos by category for display
             const categoryGroups: { [key: string]: number } = {}
             dayMemos.forEach((memo) => {
@@ -2084,7 +2094,7 @@ function MemoSessionApp() {
                   const dateStr = formatLocalDate(day)
                   const isCurrentMonth = day.getMonth() === month
                   const isToday = day.toDateString() === new Date().toDateString()
-                  
+
                   let count = 0
                   if (appMode === "memo") {
                     const dayData = monthlyData[dateStr]
@@ -2093,7 +2103,7 @@ function MemoSessionApp() {
                     const dayData = monthlySessionData[dateStr]
                     count = dayData?.session_count || 0
                   }
-                  
+
                   const intensityLevel = getIntensityLevel(count)
 
                   return (
@@ -2406,7 +2416,7 @@ function MemoSessionApp() {
               {viewMode === "daily" && (
                 <>
                   {renderSessionDailySummary()}
-                  
+
                   {/* Current Session Timer */}
                   <div className="mb-6">
                     <CircularTimer
@@ -2428,10 +2438,10 @@ function MemoSessionApp() {
                   {/* Daily Sessions List */}
                   {(() => {
                     const today = formatLocalDate(currentDate)
-                    const todaySessions = sessions.filter(session => 
+                    const todaySessions = sessions.filter(session =>
                       formatLocalDate(new Date(session.created_at)) === today
                     )
-                    
+
                     return todaySessions.length > 0 && (
                       <div className="space-y-4">
                         {todaySessions.map(renderSessionCard)}

@@ -14,13 +14,13 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 
 // UUID 생성 함수
-const generateUUID = (): string => {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0
-    const v = c == 'x' ? r : (r & 0x3 | 0x8)
-    return v.toString(16)
-  })
-}
+// const generateUUID = (): string => {
+//   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+//     const r = Math.random() * 16 | 0
+//     const v = c == 'x' ? r : (r & 0x3 | 0x8)
+//     return v.toString(16)
+//   })
+// }
 
 interface MemoAttachment {
   id: string
@@ -480,7 +480,6 @@ function MemoSessionApp() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: session.id,
           subject: session.subject,
           goal: session.goal,
           duration: session.duration,
@@ -900,10 +899,8 @@ function MemoSessionApp() {
     if (!inputText.trim()) return
 
     const allTags = currentTag.trim() ? [...inputTags, currentTag.trim()] : inputTags
-    const memoId = generateUUID()
 
     const formData = new FormData()
-    formData.append("id", memoId)
     formData.append("content", inputText)
     formData.append("tags", allTags.join(","))
 
@@ -997,10 +994,9 @@ function MemoSessionApp() {
   // Pomodoro session functions with backend integration
   const startSession = async (sessionData: { subject: string; goal: string; duration: number; tags: string[] }) => {
     const breakDuration = getBreakDuration(sessionData.duration)
-    const sessionId = generateUUID()
 
     const newSession: PomodoroSession = {
-      id: sessionId,
+      id: '', // Will be set by backend
       user_id: user?.email || '',
       subject: sessionData.subject,
       goal: sessionData.goal,

@@ -505,13 +505,20 @@ function MemoSessionApp() {
 
   const updateSessionStatus = async (sessionId: string, status: string) => {
     try {
+      const updateData: any = {
+        status,
+        updated_at: new Date().toISOString(),
+      }
+      
+      // If marking as completed, also set completed flag
+      if (status === 'completed') {
+        updateData.completed = true
+      }
+      
       const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/session/${sessionId}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status,
-          updated_at: new Date().toISOString(),
-        }),
+        body: JSON.stringify(updateData),
       })
 
       if (res && res.ok) {
@@ -603,7 +610,21 @@ function MemoSessionApp() {
     } else if (timeLeft === 0 && isRunning && currentSession) {
       setIsRunning(false)
       if (currentPhase === "focus") {
-        // Focus time completed, start break
+        // Focus time completed, mark session as completed and start break
+        const completedSession = {
+          ...currentSession,
+          status: 'completed' as const,
+          completed: true,
+          updated_at: new Date()
+        }
+        setCurrentSession(completedSession)
+        
+        // Update session status in backend
+        updateSessionStatus(currentSession.id, 'completed')
+        
+        // Refresh sessions to get updated data
+        fetchSessionsFromBackend()
+        
         setCurrentPhase("break")
         setTimeLeft(currentSession.break_duration * 60)
         setIsRunning(true)
@@ -2150,7 +2171,7 @@ function MemoSessionApp() {
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-sm bg-blue-500/80 border border-blue-400/90" />
-              <span>10개 이상 {appMode === "memo" ? "메모" : "세션"}</span>
+              <span>10개 이상 {appMode === "memo" : "세션"}</span>
             </div>
           </div>
         </div>

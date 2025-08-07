@@ -302,7 +302,6 @@ const SessionCard: React.FC<SessionCardProps> = ({
     };
 
     const utcCreated = typeof session.created_at === "string" ? new Date(session.created_at.endsWith("Z") ? session.created_at : session.created_at + "Z") : session.created_at
-    console.log(session.created_at)
     const time = utcCreated.toLocaleString(locale, {
       timeZone,
       month: "short",
@@ -371,7 +370,7 @@ const SessionCard: React.FC<SessionCardProps> = ({
 
                 <div className="flex items-center gap-4 mb-3">
                   <div className="flex items-center gap-2">
-                    <SessionProgressCircle duration={session.duration} size={32} />
+                    <SessionProgressCircle duration={session.duration} size={32}/>
                     <span className="text-white/70 text-sm">{session.duration}분</span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -434,18 +433,10 @@ const SessionCard: React.FC<SessionCardProps> = ({
     )
 }
 
-function parseMemo(memo: any): Memo {
-  return {
-    ...memo,
-    created_at: new Date(memo.created_at?.endsWith?.("Z") ? memo.created_at : memo.created_at + "Z"),
-    updated_at: new Date(memo.updated_at?.endsWith?.("Z") ? memo.updated_at : memo.updated_at + "Z"),
-  }
-}
-
 function MemoSessionApp() {
 
   // App mode state
-  const [appMode, setAppMode] = useState<AppMode>("memo")
+  const [appMode, setAppMode] = useState<AppMode>("session")
 
   // Preview expansion state for memo cards
   const [expandedPreviews, setExpandedPreviews] = useState<string[]>([])
@@ -632,33 +623,6 @@ function MemoSessionApp() {
     return iconMap[iconName] || <BookOpen className="w-4 h-4" />
   }
 
-  // Session lifecycle management functions
-  const fetchSessionsFromBackend = async () => {
-    try {
-      const dateStr = formatLocalDate(currentDate)
-      const res = await apiCall(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/session/list?tz=${encodeURIComponent(timeZone)}&start_date=${dateStr}&end_date=${dateStr}`
-      )
-      if (res && res.ok) {
-        const data = await res.json()
-        // Assuming the API returns an array of sessions directly, or an object with a sessions key
-        const backendSessions = Array.isArray(data) ? data : data.sessions || []
-
-        // Convert backend sessions to frontend format
-        const convertedSessions = backendSessions.map((session: any) => ({
-          ...session,
-          started_at: session.started_at ? new Date(session.started_at.endsWith?.("Z") ? session.started_at : session.started_at + "Z") : undefined,
-          created_at: new Date(session.created_at.endsWith?.("Z") ? session.created_at : session.created_at + "Z"),
-          updated_at: session.updated_at ? new Date(session.updated_at.endsWith?.("Z") ? session.updated_at : session.updated_at + "Z") : undefined,
-        }))
-
-        setSessions(convertedSessions)
-      }
-    } catch (err) {
-      console.error("Error fetching sessions from backend:", err)
-    }
-  }
-
   const createSessionInBackend = async (session: PomodoroSession) => {
     try {
       // Explicitly exclude `id` and other client-side only fields if any
@@ -683,7 +647,7 @@ function MemoSessionApp() {
       if (res && res.ok) {
         const newSessionData = await res.json();
         console.log("Session created in backend");
-        await fetchSessionsFromBackend();
+        await fetchSessionData();
         return newSessionData; // Return the created session data
       } else {
         console.error("Failed to create session in backend");
@@ -716,7 +680,7 @@ function MemoSessionApp() {
       if (res && res.ok) {
         console.log(`Session status updated to ${status}`)
         // Refresh sessions from backend
-        await fetchSessionsFromBackend()
+        await fetchSessionData()
       } else {
         console.error("Failed to update session status")
       }
@@ -734,7 +698,7 @@ function MemoSessionApp() {
       if (res && res.ok) {
         console.log("Session deleted from backend")
         // Refresh sessions from backend
-        await fetchSessionsFromBackend()
+        await fetchSessionData()
       } else {
         console.error("Failed to delete session from backend")
       }
@@ -757,7 +721,7 @@ function MemoSessionApp() {
       if (res && res.ok) {
         console.log("Session reflection updated in backend")
         // Refresh sessions from backend
-        await fetchSessionsFromBackend()
+        await fetchSessionData()
       } else {
         console.error("Failed to update session reflection")
       }
@@ -785,13 +749,6 @@ function MemoSessionApp() {
     }
   }, [timeZone, viewMode, currentDate, categoryFilter, appMode])
 
-  // Update session view data when sessions change
-  useEffect(() => {
-    if (appMode === "session") {
-      updateSessionViewData()
-    }
-  }, [sessions, currentDate, viewMode, appMode])
-
   // Timer logic for current session
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null
@@ -816,7 +773,7 @@ function MemoSessionApp() {
         updateSessionStatus(currentSession.id, 'completed')
 
         // Refresh sessions to get updated data
-        fetchSessionsFromBackend()
+        fetchSessionData()
 
         setCurrentPhase("break")
         setTimeLeft(currentSession.break_duration * 60)
@@ -858,6 +815,42 @@ function MemoSessionApp() {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [isScrolled])
 
+  useEffect(() => {
+    if (appMode === "session" && viewMode === "daily") {
+      fetchCurrentSession();
+    }
+  }, [appMode, viewMode, currentDate, timeZone]);
+
+  useEffect(() => {
+    if (appMode === "session" && viewMode === "daily") {
+      if (currentSession) {
+        // 타이머 초기화/세팅
+        if (["started", "paused"].includes(currentSession.status) && currentSession.started_at) {
+          const now = Date.now();
+          const started = new Date(currentSession.started_at).getTime();
+          const updated = new Date(currentSession.updated_at).getTime();
+          let elapsed = 0;
+          if (currentSession.status === "paused") {
+            elapsed = Math.floor((updated - started) / 1000); // 초 단위
+          } else if (currentSession.status === "started") {
+            elapsed = Math.floor((now - started) / 1000); // 초 단위
+          }
+          const remaining = Math.max(0, currentSession.duration * 60 - elapsed);
+          setTimeLeft(remaining);
+          setIsRunning(currentSession.status === "started");
+        } else {
+          setTimeLeft(currentSession?.duration ? currentSession.duration * 60 : 0);
+          setIsRunning(false);
+        }
+        setCurrentPhase("focus");
+      } else {
+        setTimeLeft(0);
+        setIsRunning(false);
+        setCurrentPhase("setup");
+      }
+    }
+  }, [currentSession, viewMode, appMode]);
+
   const fetchData = async () => {
     try {
       if (viewMode === "daily") {
@@ -874,62 +867,135 @@ function MemoSessionApp() {
 
   const fetchSessionData = async () => {
     // Session data is handled from backend
-    if (timeZone) {
-      await fetchSessionsFromBackend()
+    try {
+      if (viewMode === "daily") {
+        await fetchDailySessionData()
+      } else if (viewMode === "weekly") {
+        await fetchWeeklySessionData()
+      } else if (viewMode === "monthly") {
+        await fetchMonthlySessionData()
+      }
+    } catch (err) {
+      console.error("Error fetching data:", err)
     }
   }
 
-  const updateSessionViewData = () => {
-    if (viewMode === "weekly") {
-      updateWeeklySessionData()
-    } else if (viewMode === "monthly") {
-      updateMonthlySessionData()
+  function parseSession(session: any): PomodoroSession {
+    return {
+      ...session,
+      started_at: session.started_at ? new Date(session.started_at?.endsWith?.("Z") ? session.started_at : session.started_at + "Z") : undefined,
+      created_at: new Date(session.created_at?.endsWith?.("Z") ? session.created_at : session.created_at + "Z"),
+      updated_at: session.updated_at ? new Date(session.updated_at?.endsWith?.("Z") ? session.updated_at : session.updated_at + "Z") : undefined,
     }
   }
 
-  const updateWeeklySessionData = () => {
+  // 2. fetch 함수 추가
+  const fetchCurrentSession = async () => {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/session/current`;
+      const res = await apiCall(url);
+      if (res && res.ok) {
+        const data = await res.json();
+        setCurrentSession(parseSession(data));
+      } else {
+        setCurrentSession(null); // 404 처리 시에도 null
+      }
+    } catch (err) {
+      setCurrentSession(null);
+      console.error("Error fetching current session:", err);
+    }
+  };
+
+  // 1. 일간 세션 데이터
+  const fetchDailySessionData = async () => {
+    const dateStr = formatLocalDate(currentDate)
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/session/list?tz=${encodeURIComponent(timeZone)}&start_date=${dateStr}&end_date=${dateStr}`
+      const res = await apiCall(url)
+      if (res && res.ok) {
+        const data = await res.json()
+        setSessions((data || []).map(parseSession))
+      }
+    } catch (err) {
+      console.error("Error fetching daily session data:", err)
+    }
+  }
+
+  // 2. 주간 세션 데이터
+  const fetchWeeklySessionData = async () => {
     const startOfWeek = new Date(currentDate)
     startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
     const endOfWeek = new Date(startOfWeek)
     endOfWeek.setDate(startOfWeek.getDate() + 6)
 
-    const groupedSessions: { [key: string]: PomodoroSession[] } = {}
-    sessions.forEach((session) => {
-      const sessionDate = new Date(session.created_at)
-      if (sessionDate >= startOfWeek && sessionDate <= endOfWeek) {
-        const dateStr = formatLocalDate(sessionDate)
-        if (!groupedSessions[dateStr]) {
-          groupedSessions[dateStr] = []
-        }
-        groupedSessions[dateStr].push(session)
-      }
-    })
+    const startDateStr = formatLocalDate(startOfWeek)
+    const endDateStr = formatLocalDate(endOfWeek)
 
-    setWeeklySessionData(groupedSessions)
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/session/list?tz=${encodeURIComponent(timeZone)}&start_date=${startDateStr}&end_date=${endDateStr}`
+      const res = await apiCall(url)
+      if (res && res.ok) {
+        const sessions = await res.json()
+        const parsedSessions = (sessions || []).map(parseSession)
+        // 날짜별 그룹핑
+        const groupedSessions: { [key: string]: PomodoroSession[] } = {}
+        parsedSessions.forEach((session: PomodoroSession) => {
+          const localSessionDate = convertUtcToLocalDate(session.created_at, timeZone)
+          if (!groupedSessions[localSessionDate]) {
+            groupedSessions[localSessionDate] = []
+          }
+          groupedSessions[localSessionDate].push(session)
+        })
+        setWeeklySessionData(groupedSessions)
+        setSessions(parsedSessions)
+      }
+    } catch (err) {
+      console.error("Error fetching weekly session data:", err)
+    }
   }
 
-  const updateMonthlySessionData = () => {
+  // 3. 월간 세션 데이터
+  const fetchMonthlySessionData = async () => {
     const year = currentDate.getFullYear()
     const month = currentDate.getMonth()
     const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
 
-    const groupedData: { [key: string]: { session_count: number; total_focus_time: number } } = {}
-    sessions.forEach((session) => {
-      const sessionDate = new Date(session.created_at)
-      if (sessionDate >= firstDay && sessionDate <= lastDay) {
-        const dateStr = formatLocalDate(sessionDate)
-        if (!groupedData[dateStr]) {
-          groupedData[dateStr] = { session_count: 0, total_focus_time: 0 }
-        }
-        groupedData[dateStr].session_count++
-        if (session.completed) {
-          groupedData[dateStr].total_focus_time += session.duration
-        }
-      }
-    })
+    const startDateStr = formatLocalDate(firstDay)
+    const endDateStr = formatLocalDate(lastDay)
 
-    setMonthlySessionData(groupedData)
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/session/list?tz=${encodeURIComponent(timeZone)}&start_date=${startDateStr}&end_date=${endDateStr}`
+      const res = await apiCall(url)
+      if (res && res.ok) {
+        const sessions = await res.json()
+        const parsedSessions = (sessions || []).map(parseSession)
+        // 날짜별 집계
+        const groupedData: { [key: string]: { session_count: number; total_focus_time: number } } = {}
+        parsedSessions.forEach((session: PomodoroSession) => {
+          const localSessionDate = convertUtcToLocalDate(session.created_at, timeZone)
+          if (!groupedData[localSessionDate]) {
+            groupedData[localSessionDate] = { session_count: 0, total_focus_time: 0 }
+          }
+          groupedData[localSessionDate].session_count++
+          if (session.completed) {
+            groupedData[localSessionDate].total_focus_time += session.duration
+          }
+        })
+        setMonthlySessionData(groupedData)
+        setSessions(parsedSessions)
+      }
+    } catch (err) {
+      console.error("Error fetching monthly session data:", err)
+    }
+  }
+
+  function parseMemo(memo: any): Memo {
+    return {
+      ...memo,
+      created_at: new Date(memo.created_at?.endsWith?.("Z") ? memo.created_at : memo.created_at + "Z"),
+      updated_at: new Date(memo.updated_at?.endsWith?.("Z") ? memo.updated_at : memo.updated_at + "Z"),
+    }
   }
 
   const fetchDailyData = async () => {
@@ -1707,26 +1773,6 @@ function MemoSessionApp() {
             <div className="text-white/60 text-sm">진행중/중단</div>
           </div>
         </div>
-
-        {todayStats.sessionsCompleted > 0 && (
-          <div className="space-y-2">
-            <h4 className="text-white/80 font-medium text-sm">완료된 세션</h4>
-            {todayStats.sessions.filter(s => s.completed).slice(0, 3).map((session) => (
-              <div key={session.id} className="flex items-center gap-3 p-3 rounded-xl bg-white/5">
-                <SessionProgressCircle duration={session.duration} size={40} />
-                <div className="flex-1">
-                  <div className="text-white font-medium text-sm">{session.subject}</div>
-                  <div className="text-white/60 text-xs">{session.duration}분 • {new Date(session.created_at).toLocaleTimeString('ko-KR', {timeZone, hour: '2-digit', minute: '2-digit' })}</div>
-                </div>
-              </div>
-            ))}
-            {todayStats.sessionsCompleted > 3 && (
-              <div className="text-center text-white/60 text-sm">
-                +{todayStats.sessionsCompleted - 3}개 더
-              </div>
-            )}
-          </div>
-        )}
       </div>
     )
   }
@@ -1804,7 +1850,6 @@ function MemoSessionApp() {
   const renderMemoCard = (memo: Memo) => {
     const category = memo.category ? categories[memo.category] || CATEGORIES.uncategorized : null
     const utcCreated = typeof memo.created_at === "string" ? new Date(memo.created_at.endsWith("Z") ? memo.created_at : memo.created_at + "Z") : memo.created_at
-    console.log(utcCreated, memo.created_at)
     const time = utcCreated.toLocaleString(locale, {
       timeZone,
       month: "short",
@@ -2240,7 +2285,7 @@ function MemoSessionApp() {
       <div className="max-w-md mx-auto relative min-h-screen overscroll-none">
         {/* Header */}
         <div
-          className={`sticky top-0 z-20 backdrop-blur-2xl bg-white/20 border border-white/20 shadow-lg transition-all duration-300 rounded-b-3xl ${
+          className={`sticky top-0 z-20  backdrop-blur-2xl bg-white/20 border border-white/20 shadow-lg transition-all duration-300 rounded-b-3xl ${
             isScrolled ? "p-2" : "p-4"
           }`}
           style={{ ["--header-height" as any]: `${headerHeight}px` }}

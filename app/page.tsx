@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { motion, useAnimation } from "framer-motion"
 import { useDrag } from "@use-gesture/react"
+import Draggable from "react-draggable"
 
 // UUID 생성 함수
 // const generateUUID = (): string => {
@@ -438,6 +439,8 @@ function MemoSessionApp() {
   // App mode state
   const [appMode, setAppMode] = useState<AppMode>("session")
 
+  const timerRef = useRef<HTMLDivElement | null>(null)
+
   // Preview expansion state for memo cards
   const [expandedPreviews, setExpandedPreviews] = useState<string[]>([])
   const toggleExpand = (id: string) => {
@@ -533,6 +536,7 @@ function MemoSessionApp() {
   // Pomodoro session states
   const [currentPhase, setCurrentPhase] = useState<"setup" | "focus" | "break">("setup")
   const [currentSession, setCurrentSession] = useState<PomodoroSession | null>(null)
+  const [showSessionTimer, setShowSessionTimer] = useState(false)
   const [timeLeft, setTimeLeft] = useState(0)
   const [isRunning, setIsRunning] = useState(false)
   const [sessions, setSessions] = useState<PomodoroSession[]>([])
@@ -2356,6 +2360,15 @@ function MemoSessionApp() {
                 </>
               )}
 
+              {appMode === "session" && (
+                  <button
+                    onClick={() => setShowSessionTimer((prev) => !prev)}
+                    className="ml-2 p-2 rounded-full bg-white/10 hover:bg-white/20 transition"
+                  >
+                    <Timer className="w-5 h-5 text-purple-400" />
+                  </button>
+              )}
+
               <div className="relative">
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
@@ -2499,6 +2512,55 @@ function MemoSessionApp() {
         </div>
 
         {/* Content */}
+     {showSessionTimer && (
+       <>
+         {/* Overlay to close on outside click */}
+         <div
+           className="fixed inset-0 z-40"
+           onMouseDown={() => setShowSessionTimer(false)}
+           onTouchStart={() => setShowSessionTimer(false)}
+         />
+             <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+
+         <Draggable
+           nodeRef={timerRef}
+           enableUserSelectHack={false}
+           cancel="button, input, textarea, select, option, .circular-timer"
+          //  defaultPosition={{ x: 0, y: 0 }}
+         >
+           <div
+             ref={timerRef}
+            className="relative bg-black/100 p-4 rounded-xl shadow-lg cursor-grab pointer-events-auto"
+
+             style={{ touchAction: "none" }}
+             onMouseDown={(e) => e.stopPropagation()}
+             onTouchStart={(e) => { e.stopPropagation(); }}
+           >
+             {/* Drag handle */}
+             <div className="drag-handle mx-auto mb-2 w-12 h-1 bg-gray-300 rounded cursor-move" />
+
+             {/* Timer content */}
+             <div className="circular-timer">
+               <CircularTimer
+                 duration={currentSession?.duration || 25}
+                 timeLeft={timeLeft}
+                 isRunning={isRunning}
+                 isBreak={currentPhase === "break"}
+                 onToggle={toggleTimer}
+                 onReset={resetTimer}
+                 onCancel={currentPhase !== "setup" ? cancelCurrentTask : undefined}
+                 sessionTitle={currentSession?.subject}
+                 sessionGoal={currentSession?.goal}
+                 sessionTags={currentSession?.tags}
+                 sessionStartTime={currentSession?.started_at}
+                 onStartSession={startSession}
+               />
+             </div>
+           </div>
+         </Draggable>
+          </div>
+       </>
+     )}
         <div className="p-4 pb-32">
           {appMode === "memo" ? (
             <>
@@ -2530,7 +2592,7 @@ function MemoSessionApp() {
                   {renderSessionDailySummary()}
 
                   {/* Current Session Timer */}
-                  <div className="mb-6">
+                  {/* <div className="mb-6">
                     <CircularTimer
                       duration={currentSession?.duration || 25}
                       timeLeft={timeLeft}
@@ -2545,7 +2607,7 @@ function MemoSessionApp() {
                       sessionStartTime={currentSession?.started_at}
                       onStartSession={startSession}
                     />
-                  </div>
+                  </div> */}
 
                   {/* Daily Sessions List */}
                   {(() => {

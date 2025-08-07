@@ -350,9 +350,10 @@ export function CircularTimer({
               ref={svgRef}
               width="300"
               height="300"
-              className={`${effectiveSettingMode ? 'cursor-pointer' : ''}`}
-              onMouseDown={handleDragStart}
-              onTouchStart={handleDragStart}
+              className={`${effectiveSettingMode ? 'cursor-pointer' : ''} touch-none`}
+              style={{ touchAction: 'none' }}
+              onMouseDownCapture={(e) => { e.preventDefault(); e.stopPropagation(); handleDragStart(e); }}
+              onTouchStartCapture={(e) => { e.preventDefault(); e.stopPropagation(); handleDragStart(e); }}
             >
               <defs>
                 <filter id="innerShadow" x="-50%" y="-50%" width="200%" height="200%">
@@ -486,11 +487,11 @@ export function CircularTimer({
       {/* Session Setup Modal */}
       {showSessionModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
+          <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl shadow-2xl w-full max-w-sm max-h-[80vh] overflow-y-auto">
+            <div className="p-4">
               {/* Modal Header */}
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-white">🍅 새 세션 설정</h2>
+              <div className="flex items-center justify-between mb-4">
+                {/* <h2 className="text-2xl font-bold text-white">🍅 새 세션 설정</h2> */}
                 <button
                   onClick={() => setShowSessionModal(false)}
                   className="p-2 hover:bg-white/10 rounded-full transition-colors"
@@ -500,11 +501,11 @@ export function CircularTimer({
               </div>
 
               {/* Current Timer Setting Display */}
-              <div className="mb-6 p-4 bg-white/10 border border-white/20 rounded-xl text-center">
+              {/* <div className="mb-6 p-4 bg-white/10 border border-white/20 rounded-xl text-center">
                 <div className="text-sm text-white/70 mb-1">설정된 시간</div>
                 <div className="text-3xl font-bold text-white mb-1">{localDuration}분</div>
                 <div className="text-xs text-white/60 mt-1">타이머를 드래그해서 조정하세요</div>
-              </div>
+              </div> */}
 
               {/* Subject Input */}
               <div className="mb-4">
@@ -532,7 +533,7 @@ export function CircularTimer({
               </div>
 
               {/* Tags */}
-              <div className="mb-6">
+              <div className="mb-4">
                 <Label className="text-base font-semibold mb-3 block text-white">태그</Label>
                 <div className="flex gap-2 mb-3">
                   <Input

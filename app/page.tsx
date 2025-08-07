@@ -820,13 +820,13 @@ function MemoSessionApp() {
   }, [isScrolled])
 
   useEffect(() => {
-    if (appMode === "session" && viewMode === "daily") {
+    if (appMode === "session" && ["focus", "setup"].includes(currentPhase)) {
       fetchCurrentSession();
     }
   }, [appMode, viewMode, currentDate, timeZone]);
 
   useEffect(() => {
-    if (appMode === "session" && viewMode === "daily") {
+    if (appMode === "session" && ["focus", "setup"].includes(currentPhase)) {
       if (currentSession) {
         // 타이머 초기화/세팅
         if (["started", "paused"].includes(currentSession.status) && currentSession.started_at) {
@@ -2590,24 +2590,6 @@ function MemoSessionApp() {
               {viewMode === "daily" && (
                 <>
                   {renderSessionDailySummary()}
-
-                  {/* Current Session Timer */}
-                  {/* <div className="mb-6">
-                    <CircularTimer
-                      duration={currentSession?.duration || 25}
-                      timeLeft={timeLeft}
-                      isRunning={isRunning}
-                      isBreak={currentPhase === "break"}
-                      onToggle={toggleTimer}
-                      onReset={resetTimer}
-                      onCancel={currentPhase !== "setup" ? cancelCurrentTask : undefined}
-                      sessionTitle={currentSession?.subject}
-                      sessionGoal={currentSession?.goal}
-                      sessionTags={currentSession?.tags}
-                      sessionStartTime={currentSession?.started_at}
-                      onStartSession={startSession}
-                    />
-                  </div> */}
 
                   {/* Daily Sessions List */}
                   {(() => {

@@ -12,6 +12,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
+import { motion, useAnimation } from "framer-motion"
+import { useDrag } from "@use-gesture/react"
 
 // UUID 생성 함수
 // const generateUUID = (): string => {
@@ -35,8 +37,8 @@ interface Memo {
   content: string
   attachments: MemoAttachment[]
   tags: string[]
-  created_at: string
-  updated_at: string
+  created_at: Date
+  updated_at: Date
   category?: string
   category_confidence?: number
   is_archived?: boolean
@@ -121,9 +123,8 @@ const formatLocalDate = (date: Date): string => {
   return `${year}-${month}-${day}`
 }
 
-// Helper function to convert UTC datetime string to local date string
-const convertUtcToLocalDate = (utcDatetime: string, timeZone: string): string => {
-  const utcDate = utcDatetime.endsWith("Z") ? new Date(utcDatetime) : new Date(utcDatetime + "Z")
+// Helper function to convert Date object (UTC) to local date string
+const convertUtcToLocalDate = (utcDate: Date, timeZone: string): string => {
   const localDate = new Date(utcDate.toLocaleString("en-US", { timeZone }))
   return formatLocalDate(localDate)
 }
@@ -259,7 +260,190 @@ const ImageModal: React.FC<{
   )
 }
 
+
+interface SessionCardProps {
+  session: PomodoroSession;
+  locale: string;
+  timeZone: string;
+  sessionReflections: { [sessionId: string]: string };
+  setSessionReflections: React.Dispatch<React.SetStateAction<{ [sessionId: string]: string }>>;
+  handleReflectionSubmit: (sessionId: string) => Promise<void>;
+  deleteSessionFromBackend: (sessionId: string) => Promise<void>;
+}
+
+const SessionCard: React.FC<SessionCardProps> = ({
+  session,
+  locale,
+  timeZone,
+  sessionReflections,
+  setSessionReflections,
+  handleReflectionSubmit,
+  deleteSessionFromBackend
+}) => {
+    const controls = useAnimation();
+    const bgControls = useAnimation();
+
+    const bind = useDrag(({ down, movement: [mx], direction: [xDir], velocity: [vx] }) => {
+      const trigger = vx > 0.2; // If velocity is high, trigger action
+      const isSwipingLeft = xDir < 0;
+
+      if (!down && trigger && isSwipingLeft) {
+        controls.start({ x: -80 });
+        bgControls.start({ opacity: 1 });
+      } else if (!down) {
+        controls.start({ x: 0 });
+        bgControls.start({ opacity: 0 });
+      }
+    });
+
+    const handleDeleteClick = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        await deleteSessionFromBackend(session.id);
+    };
+
+    const utcCreated = typeof session.created_at === "string" ? new Date(session.created_at.endsWith("Z") ? session.created_at : session.created_at + "Z") : session.created_at
+    console.log(session.created_at)
+    const time = utcCreated.toLocaleString(locale, {
+      timeZone,
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+
+    const getStatusColor = (status: string) => {
+      switch (status) {
+        case 'completed': return 'bg-green-400'
+        case 'started': return 'bg-blue-400'
+        case 'paused': return 'bg-yellow-400'
+        case 'cancelled': return 'bg-red-400'
+        default: return 'bg-gray-400'
+      }
+    }
+
+    const getStatusText = (status: string) => {
+      switch (status) {
+        case 'completed': return '완료'
+        case 'started': return '진행중'
+        case 'paused': return '일시정지'
+        case 'cancelled': return '취소됨'
+        case 'pending': return '대기중'
+        default: return status
+      }
+    }
+
+    return (
+        <div key={session.id} className="relative overflow-hidden rounded-2xl">
+            <motion.div
+                animate={bgControls}
+                initial={{ opacity: 0 }}
+                className="absolute inset-y-0 right-0 w-24 bg-red-500 flex items-center justify-center"
+            >
+                <Button onClick={handleDeleteClick} className="bg-transparent hover:bg-red-600 p-4 rounded-full">
+                    <Trash2 className="w-6 h-6 text-white" />
+                </Button>
+            </motion.div>
+            <motion.div
+              {...bind()}
+              animate={controls}
+              drag="x"
+              dragConstraints={{ left: -200, right: 0 }}
+              dragElastic={0.2}
+              className="relative z-10 backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-5 hover:bg-white/15 transition-all duration-200"
+            >
+              {/* Header with timer icon and time */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                    <Timer className="w-4 h-4 text-purple-400" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-white/90">포모도로 세션</span>
+                  </div>
+                </div>
+                <span className="text-xs text-white/60">{time}</span>
+              </div>
+
+              {/* Session content */}
+              <div className="mb-4">
+                <h3 className="text-white font-semibold mb-2">{session.subject}</h3>
+                {session.goal && <p className="text-white/80 text-sm mb-3">{session.goal}</p>}
+
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="flex items-center gap-2">
+                    <SessionProgressCircle duration={session.duration} size={32} />
+                    <span className="text-white/70 text-sm">{session.duration}분</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${getStatusColor(session.status)}`} />
+                    <span className="text-white/70 text-sm">{getStatusText(session.status)}</span>
+                  </div>
+                </div>
+
+                {session.reflection && (
+                  <div className="text-sm text-white/70 bg-white/5 rounded-lg p-3 mb-3">
+                    <p><strong>회고:</strong> {session.reflection}</p>
+                  </div>
+                )}
+
+                {/* Reflection input for completed sessions without reflection */}
+                {session.completed && !session.reflection && (
+                  <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle className="w-4 h-4 text-green-400" />
+                      <span className="text-sm font-medium text-white">회고 작성</span>
+                    </div>
+                    <textarea
+                      placeholder="이 세션에서 무엇을 완료했나요? 어떤 점이 좋았고 개선할 점은 무엇인가요?"
+                      value={sessionReflections[session.id] || ''}
+                      onChange={(e) => setSessionReflections(prev => ({
+                        ...prev,
+                        [session.id]: e.target.value
+                      }))}
+                      rows={3}
+                      className="w-full p-2 text-sm bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 resize-none mb-2"
+                    />
+                    <button
+                      onClick={() => handleReflectionSubmit(session.id)}
+                      disabled={!sessionReflections[session.id]?.trim()}
+                      className="w-full py-2 px-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:from-gray-500 disabled:to-gray-600 disabled:opacity-50 text-white text-sm rounded-lg transition-all"
+                    >
+                      회고 저장
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Tags */}
+              {session.tags && session.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {session.tags.slice(0, 3).map((tag, idx) => (
+                    <span key={idx} className="text-xs px-3 py-1.5 rounded-full bg-white/15 text-white/80 font-medium">
+                      {tag}
+                    </span>
+                  ))}
+                  {session.tags.length > 3 && (
+                    <span className="text-xs px-3 py-1.5 rounded-full bg-white/10 text-white/60">
+                      +{session.tags.length - 3}
+                    </span>
+                  )}
+                </div>
+              )}
+            </motion.div>
+        </div>
+    )
+}
+
+function parseMemo(memo: any): Memo {
+  return {
+    ...memo,
+    created_at: new Date(memo.created_at?.endsWith?.("Z") ? memo.created_at : memo.created_at + "Z"),
+    updated_at: new Date(memo.updated_at?.endsWith?.("Z") ? memo.updated_at : memo.updated_at + "Z"),
+  }
+}
+
 function MemoSessionApp() {
+
   // App mode state
   const [appMode, setAppMode] = useState<AppMode>("memo")
 
@@ -457,14 +641,15 @@ function MemoSessionApp() {
       )
       if (res && res.ok) {
         const data = await res.json()
-        const backendSessions = data.sessions || []
+        // Assuming the API returns an array of sessions directly, or an object with a sessions key
+        const backendSessions = Array.isArray(data) ? data : data.sessions || []
 
         // Convert backend sessions to frontend format
         const convertedSessions = backendSessions.map((session: any) => ({
           ...session,
-          started_at: session.started_at ? new Date(session.started_at) : undefined,
-          created_at: new Date(session.created_at),
-          updated_at: new Date(session.updated_at),
+          started_at: session.started_at ? new Date(session.started_at.endsWith?.("Z") ? session.started_at : session.started_at + "Z") : undefined,
+          created_at: new Date(session.created_at.endsWith?.("Z") ? session.created_at : session.created_at + "Z"),
+          updated_at: session.updated_at ? new Date(session.updated_at.endsWith?.("Z") ? session.updated_at : session.updated_at + "Z") : undefined,
         }))
 
         setSessions(convertedSessions)
@@ -476,30 +661,37 @@ function MemoSessionApp() {
 
   const createSessionInBackend = async (session: PomodoroSession) => {
     try {
+      // Explicitly exclude `id` and other client-side only fields if any
+      const sessionPayload = {
+        subject: session.subject,
+        goal: session.goal,
+        duration: session.duration,
+        break_duration: session.break_duration,
+        tags: session.tags,
+        status: session.status,
+        completed: session.completed,
+        created_at: session.created_at,
+        // user_id is handled by the backend based on the session/cookie
+      };
+
       const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subject: session.subject,
-          goal: session.goal,
-          duration: session.duration,
-          break_duration: session.break_duration,
-          tags: session.tags,
-          status: session.status,
-          completed: session.completed,
-          created_at: session.created_at.toISOString(),
-        }),
+        body: JSON.stringify(sessionPayload),
       })
 
       if (res && res.ok) {
-        console.log("Session created in backend")
-        // Refresh sessions from backend
-        await fetchSessionsFromBackend()
+        const newSessionData = await res.json();
+        console.log("Session created in backend");
+        await fetchSessionsFromBackend();
+        return newSessionData; // Return the created session data
       } else {
-        console.error("Failed to create session in backend")
+        console.error("Failed to create session in backend");
+        return null;
       }
     } catch (err) {
-      console.error("Error creating session in backend:", err)
+      console.error("Error creating session in backend:", err);
+      return null;
     }
   }
 
@@ -509,12 +701,12 @@ function MemoSessionApp() {
         status,
         updated_at: new Date().toISOString(),
       }
-      
+
       // If marking as completed, also set completed flag
       if (status === 'completed') {
         updateData.completed = true
       }
-      
+
       const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/session/${sessionId}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -557,7 +749,8 @@ function MemoSessionApp() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          reflection: reflection
+          reflection: reflection,
+          updated_at: new Date().toISOString(),
         }),
       })
 
@@ -618,13 +811,13 @@ function MemoSessionApp() {
           updated_at: new Date()
         }
         setCurrentSession(completedSession)
-        
+
         // Update session status in backend
         updateSessionStatus(currentSession.id, 'completed')
-        
+
         // Refresh sessions to get updated data
         fetchSessionsFromBackend()
-        
+
         setCurrentPhase("break")
         setTimeLeft(currentSession.break_duration * 60)
         setIsRunning(true)
@@ -676,7 +869,6 @@ function MemoSessionApp() {
       }
     } catch (err) {
       console.error("Error fetching data:", err)
-      generateMockData()
     }
   }
 
@@ -750,7 +942,7 @@ function MemoSessionApp() {
       const res = await apiCall(url)
       if (res && res.ok) {
         const data = await res.json()
-        setMemos(data || [])
+        setMemos((data || []).map(parseMemo))
       }
 
       // Fetch daily summary (if available)
@@ -776,9 +968,10 @@ function MemoSessionApp() {
       if (res && res.ok) {
         const memos = await res.json()
 
+        const parsedMemos = (memos || []).map(parseMemo)
         // Group memos by date using local timezone
         const groupedMemos: { [key: string]: Memo[] } = {}
-        memos.forEach((memo: Memo) => {
+        parsedMemos.forEach((memo: Memo) => {
           const localMemoDate = convertUtcToLocalDate(memo.created_at, timeZone)
           if (!groupedMemos[localMemoDate]) {
             groupedMemos[localMemoDate] = []
@@ -809,9 +1002,10 @@ function MemoSessionApp() {
       if (res && res.ok) {
         const memos = await res.json()
 
+        const parsedMemos = (memos || []).map(parseMemo)
         // Group memos by date and count using local timezone
         const groupedData: { [key: string]: { memo_count: number; has_summary: boolean } } = {}
-        memos.forEach((memo: Memo) => {
+        parsedMemos.forEach((memo: Memo) => {
           const localMemoDate = convertUtcToLocalDate(memo.created_at, timeZone)
           if (!groupedData[localMemoDate]) {
             groupedData[localMemoDate] = { memo_count: 0, has_summary: false }
@@ -843,42 +1037,6 @@ function MemoSessionApp() {
     }
   }
 
-  const generateMockData = () => {
-    // Mock data generation for development
-    const mockMemos: Memo[] = [
-      {
-        id: "1",
-        user_id: "user1",
-        content:
-          "React 18의 새로운 Concurrent Features에 대해 공부했다.\n\n## 주요 특징\n- **Suspense**: 데이터 로딩 상태 관리\n- **Concurrent Rendering**: 우선순위 기반 렌더링\n- `useTransition` 훅으로 상태 업데이트 최적화\n\n정말 흥미로운 기능들이다!",
-        attachments: [],
-        tags: ["react", "study"],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        category: "study",
-        category_confidence: 0.95,
-      },
-    ]
-    setMemos(mockMemos)
-
-    // Mock daily summary for today
-    if (viewMode === "daily" && currentDate.toDateString() === new Date().toDateString()) {
-      const mockSummary: DailySummary = {
-        date: formatLocalDate(currentDate),
-        ai_comment: "오늘은 주로 학습과 아이디어 정리에 집중하신 하루였네요. 특히 React 관련 내용이 많았습니다.",
-        category_summaries: [
-          {
-            category: "study",
-            summary: "React 18의 Concurrent Features에 대해 학습",
-            memo_count: 1,
-          },
-        ],
-        total_memos: 1,
-        created_at: new Date().toISOString(),
-      }
-      setDailySummary(mockSummary)
-    }
-  }
 
   const createNewCategory = async (name: string, isForEdit = false) => {
     if (!name.trim()) return
@@ -1030,13 +1188,19 @@ function MemoSessionApp() {
       completed: false
     }
 
-    setCurrentSession(newSession)
-    setTimeLeft(sessionData.duration * 60)
-    setCurrentPhase("focus")
-    setIsRunning(false)
-
-    // Create session in backend
-    await createSessionInBackend(newSession)
+    const createdSession = await createSessionInBackend(newSession);
+    if (createdSession) {
+        const convertedSession = {
+            ...createdSession,
+            started_at: createdSession.started_at ? new Date(createdSession.started_at) : undefined,
+            created_at: new Date(createdSession.created_at),
+            updated_at: createdSession.updated_at ? new Date(createdSession.updated_at) : new Date(),
+        };
+        setCurrentSession(convertedSession);
+        setTimeLeft(convertedSession.duration * 60);
+        setCurrentPhase("focus");
+        setIsRunning(false);
+    }
   }
 
   const toggleTimer = async () => {
@@ -1552,7 +1716,7 @@ function MemoSessionApp() {
                 <SessionProgressCircle duration={session.duration} size={40} />
                 <div className="flex-1">
                   <div className="text-white font-medium text-sm">{session.subject}</div>
-                  <div className="text-white/60 text-xs">{session.duration}분 • {new Date(session.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</div>
+                  <div className="text-white/60 text-xs">{session.duration}분 • {new Date(session.created_at).toLocaleTimeString('ko-KR', {timeZone, hour: '2-digit', minute: '2-digit' })}</div>
                 </div>
               </div>
             ))}
@@ -1639,7 +1803,8 @@ function MemoSessionApp() {
 
   const renderMemoCard = (memo: Memo) => {
     const category = memo.category ? categories[memo.category] || CATEGORIES.uncategorized : null
-    const utcCreated = memo.created_at.endsWith("Z") ? new Date(memo.created_at) : new Date(memo.created_at + "Z")
+    const utcCreated = typeof memo.created_at === "string" ? new Date(memo.created_at.endsWith("Z") ? memo.created_at : memo.created_at + "Z") : memo.created_at
+    console.log(utcCreated, memo.created_at)
     const time = utcCreated.toLocaleString(locale, {
       timeZone,
       month: "short",
@@ -1759,122 +1924,7 @@ function MemoSessionApp() {
     )
   }
 
-  // Session card renderer
-  const renderSessionCard = (session: PomodoroSession) => {
-    const time = new Date(session.created_at).toLocaleString(locale, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
 
-    const getStatusColor = (status: string) => {
-      switch (status) {
-        case 'completed': return 'bg-green-400'
-        case 'started': return 'bg-blue-400'
-        case 'paused': return 'bg-yellow-400'
-        case 'cancelled': return 'bg-red-400'
-        default: return 'bg-gray-400'
-      }
-    }
-
-    const getStatusText = (status: string) => {
-      switch (status) {
-        case 'completed': return '완료'
-        case 'started': return '진행중'
-        case 'paused': return '일시정지'
-        case 'cancelled': return '취소됨'
-        case 'pending': return '대기중'
-        default: return status
-      }
-    }
-
-    return (
-      <div
-        key={session.id}
-        className="backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-5 hover:bg-white/15 transition-all duration-200"
-      >
-        {/* Header with timer icon and time */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
-              <Timer className="w-4 h-4 text-purple-400" />
-            </div>
-            <div>
-              <span className="text-sm font-medium text-white/90">포모도로 세션</span>
-            </div>
-          </div>
-          <span className="text-xs text-white/60">{time}</span>
-        </div>
-
-        {/* Session content */}
-        <div className="mb-4">
-          <h3 className="text-white font-semibold mb-2">{session.subject}</h3>
-          {session.goal && <p className="text-white/80 text-sm mb-3">{session.goal}</p>}
-
-          <div className="flex items-center gap-4 mb-3">
-            <div className="flex items-center gap-2">
-              <SessionProgressCircle duration={session.duration} size={32} />
-              <span className="text-white/70 text-sm">{session.duration}분</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className={`w-3 h-3 rounded-full ${getStatusColor(session.status)}`} />
-              <span className="text-white/70 text-sm">{getStatusText(session.status)}</span>
-            </div>
-          </div>
-
-          {session.reflection && (
-            <div className="text-sm text-white/70 bg-white/5 rounded-lg p-3 mb-3">
-              <p><strong>회고:</strong> {session.reflection}</p>
-            </div>
-          )}
-
-          {/* Reflection input for completed sessions without reflection */}
-          {session.completed && !session.reflection && (
-            <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
-              <div className="flex items-center gap-2 mb-2">
-                <CheckCircle className="w-4 h-4 text-green-400" />
-                <span className="text-sm font-medium text-white">회고 작성</span>
-              </div>
-              <textarea
-                placeholder="이 세션에서 무엇을 완료했나요? 어떤 점이 좋았고 개선할 점은 무엇인가요?"
-                value={sessionReflections[session.id] || ''}
-                onChange={(e) => setSessionReflections(prev => ({
-                  ...prev,
-                  [session.id]: e.target.value
-                }))}
-                rows={3}
-                className="w-full p-2 text-sm bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 resize-none mb-2"
-              />
-              <button
-                onClick={() => handleReflectionSubmit(session.id)}
-                disabled={!sessionReflections[session.id]?.trim()}
-                className="w-full py-2 px-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:from-gray-500 disabled:to-gray-600 disabled:opacity-50 text-white text-sm rounded-lg transition-all"
-              >
-                회고 저장
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Tags */}
-        {session.tags && session.tags.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {session.tags.slice(0, 3).map((tag, idx) => (
-              <span key={idx} className="text-xs px-3 py-1.5 rounded-full bg-white/15 text-white/80 font-medium">
-                {tag}
-              </span>
-            ))}
-            {session.tags.length > 3 && (
-              <span className="text-xs px-3 py-1.5 rounded-full bg-white/10 text-white/60">
-                +{session.tags.length - 3}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-    )
-  }
 
   const renderWeeklyView = () => {
     const startOfWeek = new Date(currentDate)
@@ -2171,7 +2221,7 @@ function MemoSessionApp() {
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-sm bg-blue-500/80 border border-blue-400/90" />
-              <span>10개 이상 {appMode === "memo" : "세션"}</span>
+              <span>10개 이상 {appMode === "memo" ? "메모" : "세션"}</span>
             </div>
           </div>
         </div>
@@ -2461,7 +2511,18 @@ function MemoSessionApp() {
 
                     return todaySessions.length > 0 && (
                       <div className="space-y-4">
-                        {todaySessions.map(renderSessionCard)}
+                        {todaySessions.map(session => (
+                        <SessionCard
+                          key={session.id}
+                          session={session}
+                          timeZone={timeZone}
+                          locale={locale}
+                          sessionReflections={sessionReflections}
+                          setSessionReflections={setSessionReflections}
+                          handleReflectionSubmit={handleReflectionSubmit}
+                          deleteSessionFromBackend={deleteSessionFromBackend}
+                        />
+                      ))}
                       </div>
                     )
                   })()}
@@ -3110,9 +3171,7 @@ function MemoSessionApp() {
                     <div className="text-white/60 text-xs text-right space-y-0.5">
                       <p>
                         작성일: {(() => {
-                          const utcDate = selectedMemo.created_at.endsWith("Z")
-                            ? new Date(selectedMemo.created_at)
-                            : new Date(selectedMemo.created_at + "Z")
+                          const utcDate = selectedMemo.created_at
                           return utcDate.toLocaleString(locale, {
                             timeZone,
                             year: "numeric",
@@ -3126,9 +3185,7 @@ function MemoSessionApp() {
                       </p>
                       <p>
                         수정일: {(() => {
-                          const utcDate = selectedMemo.updated_at.endsWith("Z")
-                            ? new Date(selectedMemo.updated_at)
-                            : new Date(selectedMemo.updated_at + "Z")
+                          const utcDate = selectedMemo.updated_at
                           return utcDate.toLocaleString(locale, {
                             timeZone,
                             year: "numeric",

@@ -3,37 +3,27 @@
 import type React from "react"
 
 import { useEffect, useState, useRef, useMemo } from "react"
-import {
-  Plus,
-  Search,
-  Edit3,
-  BookOpen,
-  ShoppingCart,
-  Lightbulb,
-  Briefcase,
-  Heart,
-  Mic,
-  Calendar,
-  Settings,
-  LogOut,
-  User,
-  ChevronLeft,
-  ChevronRight,
-  ChevronDown,
-  ChevronUp,
-  Sparkles,
-  BarChart3,
-  Grid3X3,
-  Clock,
-  X,
-  Camera,
-  Pause,
-  Play,
-  Trash2,
-  ZoomIn,
-} from "lucide-react"
+import { Plus, Search, Edit3, BookOpen, ShoppingCart, Lightbulb, Briefcase, Heart, Mic, Calendar, Settings, LogOut, User, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Sparkles, BarChart3, Grid3X3, Clock, X, Camera, Pause, Play, Trash2, ZoomIn, Timer, CheckCircle, Coffee, TrendingUp, ArrowRight, AlertCircle } from 'lucide-react'
 import AuthGuard from "@/components/auth-guard"
 import CategoryManagement from "@/components/category-management"
+import { CircularTimer } from "@/components/circular-timer"
+import { SessionProgressCircle } from "@/components/session-progress-circle"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Textarea } from "@/components/ui/textarea"
+import { motion, useAnimation } from "framer-motion"
+import { useDrag } from "@use-gesture/react"
+import Draggable from "react-draggable"
+
+// UUID 생성 함수
+// const generateUUID = (): string => {
+//   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+//     const r = Math.random() * 16 | 0
+//     const v = c == 'x' ? r : (r & 0x3 | 0x8)
+//     return v.toString(16)
+//   })
+// }
 
 interface MemoAttachment {
   id: string
@@ -48,11 +38,27 @@ interface Memo {
   content: string
   attachments: MemoAttachment[]
   tags: string[]
-  created_at: string
-  updated_at: string
+  created_at: Date
+  updated_at: Date
   category?: string
   category_confidence?: number
   is_archived?: boolean
+}
+
+interface PomodoroSession {
+  id: string
+  user_id: string
+  subject: string
+  goal?: string
+  duration: number
+  break_duration: number
+  tags?: string[]
+  started_at?: Date
+  created_at: Date
+  updated_at: Date
+  status: 'pending' | 'started' | 'paused' | 'completed' | 'cancelled'
+  completed: boolean
+  reflection?: string
 }
 
 interface DailySummary {
@@ -108,6 +114,7 @@ const CATEGORIES: Record<string, CategoryConfig> = {
 }
 
 type ViewMode = "daily" | "weekly" | "monthly"
+type AppMode = "memo" | "session"
 
 // Helper function to convert Date to local YYYY-MM-DD string
 const formatLocalDate = (date: Date): string => {
@@ -117,11 +124,16 @@ const formatLocalDate = (date: Date): string => {
   return `${year}-${month}-${day}`
 }
 
-// Helper function to convert UTC datetime string to local date string
-const convertUtcToLocalDate = (utcDatetime: string, timeZone: string): string => {
-  const utcDate = utcDatetime.endsWith("Z") ? new Date(utcDatetime) : new Date(utcDatetime + "Z")
+// Helper function to convert Date object (UTC) to local date string
+const convertUtcToLocalDate = (utcDate: Date, timeZone: string): string => {
   const localDate = new Date(utcDate.toLocaleString("en-US", { timeZone }))
   return formatLocalDate(localDate)
+}
+
+const getBreakDuration = (focusMinutes: number): number => {
+  if (focusMinutes <= 25) return 5
+  if (focusMinutes <= 45) return 10
+  return 15
 }
 
 // Simple markdown renderer component
@@ -249,7 +261,186 @@ const ImageModal: React.FC<{
   )
 }
 
-function MemoApp() {
+
+interface SessionCardProps {
+  session: PomodoroSession;
+  locale: string;
+  timeZone: string;
+  sessionReflections: { [sessionId: string]: string };
+  setSessionReflections: React.Dispatch<React.SetStateAction<{ [sessionId: string]: string }>>;
+  handleReflectionSubmit: (sessionId: string) => Promise<void>;
+  deleteSessionFromBackend: (sessionId: string) => Promise<void>;
+}
+
+const SessionCard: React.FC<SessionCardProps> = ({
+  session,
+  locale,
+  timeZone,
+  sessionReflections,
+  setSessionReflections,
+  handleReflectionSubmit,
+  deleteSessionFromBackend
+}) => {
+    const controls = useAnimation();
+    const bgControls = useAnimation();
+
+    const bind = useDrag(({ down, movement: [mx], direction: [xDir], velocity: [vx] }) => {
+      const trigger = vx > 0.2; // If velocity is high, trigger action
+      const isSwipingLeft = xDir < 0;
+
+      if (!down && trigger && isSwipingLeft) {
+        controls.start({ x: -80 });
+        bgControls.start({ opacity: 1 });
+      } else if (!down) {
+        controls.start({ x: 0 });
+        bgControls.start({ opacity: 0 });
+      }
+    });
+
+    const handleDeleteClick = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        await deleteSessionFromBackend(session.id);
+    };
+
+    const utcCreated = typeof session.created_at === "string" ? new Date(session.created_at.endsWith("Z") ? session.created_at : session.created_at + "Z") : session.created_at
+    const time = utcCreated.toLocaleString(locale, {
+      timeZone,
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+
+    const getStatusColor = (status: string) => {
+      switch (status) {
+        case 'completed': return 'bg-green-400'
+        case 'started': return 'bg-blue-400'
+        case 'paused': return 'bg-yellow-400'
+        case 'cancelled': return 'bg-red-400'
+        default: return 'bg-gray-400'
+      }
+    }
+
+    const getStatusText = (status: string) => {
+      switch (status) {
+        case 'completed': return '완료'
+        case 'started': return '진행중'
+        case 'paused': return '일시정지'
+        case 'cancelled': return '취소됨'
+        case 'pending': return '대기중'
+        default: return status
+      }
+    }
+
+    return (
+        <div key={session.id} className="relative overflow-hidden rounded-2xl">
+            <motion.div
+                animate={bgControls}
+                initial={{ opacity: 0 }}
+                className="absolute inset-y-0 right-0 w-24 bg-red-500 flex items-center justify-center"
+            >
+                <Button onClick={handleDeleteClick} className="bg-transparent hover:bg-red-600 p-4 rounded-full">
+                    <Trash2 className="w-6 h-6 text-white" />
+                </Button>
+            </motion.div>
+            <motion.div
+              {...bind()}
+              animate={controls}
+              drag="x"
+              dragConstraints={{ left: -200, right: 0 }}
+              dragElastic={0.2}
+              className="relative z-10 backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-5 hover:bg-white/15 transition-all duration-200"
+            >
+              {/* Header with timer icon and time */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                    <Timer className="w-4 h-4 text-purple-400" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-white/90">포모도로 세션</span>
+                  </div>
+                </div>
+                <span className="text-xs text-white/60">{time}</span>
+              </div>
+
+              {/* Session content */}
+              <div className="mb-4">
+                <h3 className="text-white font-semibold mb-2">{session.subject}</h3>
+                {session.goal && <p className="text-white/80 text-sm mb-3">{session.goal}</p>}
+
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="flex items-center gap-2">
+                    <SessionProgressCircle duration={session.duration} size={32}/>
+                    <span className="text-white/70 text-sm">{session.duration}분</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${getStatusColor(session.status)}`} />
+                    <span className="text-white/70 text-sm">{getStatusText(session.status)}</span>
+                  </div>
+                </div>
+
+                {session.reflection && (
+                  <div className="text-sm text-white/70 bg-white/5 rounded-lg p-3 mb-3">
+                    <p><strong>회고:</strong> {session.reflection}</p>
+                  </div>
+                )}
+
+                {/* Reflection input for completed sessions without reflection */}
+                {session.completed && !session.reflection && (
+                  <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle className="w-4 h-4 text-green-400" />
+                      <span className="text-sm font-medium text-white">회고 작성</span>
+                    </div>
+                    <textarea
+                      placeholder="이 세션에서 무엇을 완료했나요? 어떤 점이 좋았고 개선할 점은 무엇인가요?"
+                      value={sessionReflections[session.id] || ''}
+                      onChange={(e) => setSessionReflections(prev => ({
+                        ...prev,
+                        [session.id]: e.target.value
+                      }))}
+                      rows={3}
+                      className="w-full p-2 text-sm bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 resize-none mb-2"
+                    />
+                    <button
+                      onClick={() => handleReflectionSubmit(session.id)}
+                      disabled={!sessionReflections[session.id]?.trim()}
+                      className="w-full py-2 px-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:from-gray-500 disabled:to-gray-600 disabled:opacity-50 text-white text-sm rounded-lg transition-all"
+                    >
+                      회고 저장
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Tags */}
+              {session.tags && session.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {session.tags.slice(0, 3).map((tag, idx) => (
+                    <span key={idx} className="text-xs px-3 py-1.5 rounded-full bg-white/15 text-white/80 font-medium">
+                      {tag}
+                    </span>
+                  ))}
+                  {session.tags.length > 3 && (
+                    <span className="text-xs px-3 py-1.5 rounded-full bg-white/10 text-white/60">
+                      +{session.tags.length - 3}
+                    </span>
+                  )}
+                </div>
+              )}
+            </motion.div>
+        </div>
+    )
+}
+
+function MemoSessionApp() {
+
+  // App mode state
+  const [appMode, setAppMode] = useState<AppMode>("session")
+
+  const timerRef = useRef<HTMLDivElement | null>(null)
+
   // Preview expansion state for memo cards
   const [expandedPreviews, setExpandedPreviews] = useState<string[]>([])
   const toggleExpand = (id: string) => {
@@ -316,6 +507,10 @@ function MemoApp() {
   const [weeklyData, setWeeklyData] = useState<{ [key: string]: Memo[] }>({})
   const [monthlyData, setMonthlyData] = useState<{ [key: string]: { memo_count: number; has_summary: boolean } }>({})
 
+  // Session weekly/monthly data
+  const [weeklySessionData, setWeeklySessionData] = useState<{ [key: string]: PomodoroSession[] }>({})
+  const [monthlySessionData, setMonthlySessionData] = useState<{ [key: string]: { session_count: number; total_focus_time: number } }>({})
+
   // Browser locale for date formatting
   const locale = typeof navigator !== "undefined" ? navigator.language : "en-US"
 
@@ -328,6 +523,26 @@ function MemoApp() {
 
   // Categories states
   const [categories, setCategories] = useState<Record<string, CategoryConfig>>(CATEGORIES)
+
+  // 카테고리 선택 상태
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [editSelectedCategory, setEditSelectedCategory] = useState<string | null>(null)
+  const [showCategorySelector, setShowCategorySelector] = useState(false)
+  const [showEditCategorySelector, setShowEditCategorySelector] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState("")
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false)
+  const [showEditNewCategoryInput, setShowEditNewCategoryInput] = useState(false)
+
+  // Pomodoro session states
+  const [currentPhase, setCurrentPhase] = useState<"setup" | "focus" | "break">("setup")
+  const [currentSession, setCurrentSession] = useState<PomodoroSession | null>(null)
+  const [showSessionTimer, setShowSessionTimer] = useState(false)
+  const [timeLeft, setTimeLeft] = useState(0)
+  const [isRunning, setIsRunning] = useState(false)
+  const [sessions, setSessions] = useState<PomodoroSession[]>([])
+
+  // Session reflection states
+  const [sessionReflections, setSessionReflections] = useState<{ [sessionId: string]: string }>({})
 
   // Common API call function with 401 handling
   const apiCall = async (url: string, options: RequestInit = {}) => {
@@ -412,6 +627,113 @@ function MemoApp() {
     return iconMap[iconName] || <BookOpen className="w-4 h-4" />
   }
 
+  const createSessionInBackend = async (session: PomodoroSession) => {
+    try {
+      // Explicitly exclude `id` and other client-side only fields if any
+      const sessionPayload = {
+        subject: session.subject,
+        goal: session.goal,
+        duration: session.duration,
+        break_duration: session.break_duration,
+        tags: session.tags,
+        status: session.status,
+        completed: session.completed,
+        created_at: session.created_at,
+        // user_id is handled by the backend based on the session/cookie
+      };
+
+      const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sessionPayload),
+      })
+
+      if (res && res.ok) {
+        const newSessionData = await res.json();
+        console.log("Session created in backend");
+        await fetchSessionData();
+        return newSessionData; // Return the created session data
+      } else {
+        console.error("Failed to create session in backend");
+        return null;
+      }
+    } catch (err) {
+      console.error("Error creating session in backend:", err);
+      return null;
+    }
+  }
+
+  const updateSessionStatus = async (sessionId: string, status: string) => {
+    try {
+      const updateData: any = {
+        status,
+        updated_at: new Date().toISOString(),
+      }
+
+      // If marking as completed, also set completed flag
+      if (status === 'completed') {
+        updateData.completed = true
+      }
+
+      const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/session/${sessionId}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updateData),
+      })
+
+      if (res && res.ok) {
+        console.log(`Session status updated to ${status}`)
+        // Refresh sessions from backend
+        await fetchSessionData()
+      } else {
+        console.error("Failed to update session status")
+      }
+    } catch (err) {
+      console.error("Error updating session status:", err)
+    }
+  }
+
+  const deleteSessionFromBackend = async (sessionId: string) => {
+    try {
+      const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/session/${sessionId}`, {
+        method: "DELETE",
+      })
+
+      if (res && res.ok) {
+        console.log("Session deleted from backend")
+        // Refresh sessions from backend
+        await fetchSessionData()
+      } else {
+        console.error("Failed to delete session from backend")
+      }
+    } catch (err) {
+      console.error("Error deleting session from backend:", err)
+    }
+  }
+
+  const updateSessionReflection = async (sessionId: string, reflection: string) => {
+    try {
+      const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/session/${sessionId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reflection: reflection,
+          updated_at: new Date().toISOString(),
+        }),
+      })
+
+      if (res && res.ok) {
+        console.log("Session reflection updated in backend")
+        // Refresh sessions from backend
+        await fetchSessionData()
+      } else {
+        console.error("Failed to update session reflection")
+      }
+    } catch (err) {
+      console.error("Error updating session reflection:", err)
+    }
+  }
+
   useEffect(() => {
     fetchUser()
     fetchCustomCategories()
@@ -424,8 +746,54 @@ function MemoApp() {
 
   useEffect(() => {
     if (!timeZone) return
-    fetchData()
-  }, [timeZone, viewMode, currentDate, categoryFilter])
+    if (appMode === "memo") {
+      fetchData()
+    } else if (appMode === "session") {
+      fetchSessionData()
+    }
+  }, [timeZone, viewMode, currentDate, categoryFilter, appMode])
+
+  // Timer logic for current session
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null
+
+    if (isRunning && timeLeft > 0 && currentSession) {
+      interval = setInterval(() => {
+        setTimeLeft(prev => prev - 1)
+      }, 1000)
+    } else if (timeLeft === 0 && isRunning && currentSession) {
+      setIsRunning(false)
+      if (currentPhase === "focus") {
+        // Focus time completed, mark session as completed and start break
+        const completedSession = {
+          ...currentSession,
+          status: 'completed' as const,
+          completed: true,
+          updated_at: new Date()
+        }
+        setCurrentSession(completedSession)
+
+        // Update session status in backend
+        updateSessionStatus(currentSession.id, 'completed')
+
+        // Refresh sessions to get updated data
+        fetchSessionData()
+
+        setCurrentPhase("break")
+        setTimeLeft(currentSession.break_duration * 60)
+        setIsRunning(true)
+      } else if (currentPhase === "break") {
+        // Break completed, reset to setup
+        setCurrentPhase("setup")
+        setCurrentSession(null)
+        setTimeLeft(0)
+      }
+    }
+
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [isRunning, timeLeft, currentPhase, currentSession])
 
   useEffect(() => {
     let ticking = false
@@ -451,6 +819,42 @@ function MemoApp() {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [isScrolled])
 
+  useEffect(() => {
+    if (appMode === "session" && viewMode === "daily") {
+      fetchCurrentSession();
+    }
+  }, [appMode, viewMode, currentDate, timeZone]);
+
+  useEffect(() => {
+    if (appMode === "session" && viewMode === "daily") {
+      if (currentSession) {
+        // 타이머 초기화/세팅
+        if (["started", "paused"].includes(currentSession.status) && currentSession.started_at) {
+          const now = Date.now();
+          const started = new Date(currentSession.started_at).getTime();
+          const updated = new Date(currentSession.updated_at).getTime();
+          let elapsed = 0;
+          if (currentSession.status === "paused") {
+            elapsed = Math.floor((updated - started) / 1000); // 초 단위
+          } else if (currentSession.status === "started") {
+            elapsed = Math.floor((now - started) / 1000); // 초 단위
+          }
+          const remaining = Math.max(0, currentSession.duration * 60 - elapsed);
+          setTimeLeft(remaining);
+          setIsRunning(currentSession.status === "started");
+        } else {
+          setTimeLeft(currentSession?.duration ? currentSession.duration * 60 : 0);
+          setIsRunning(false);
+        }
+        setCurrentPhase("focus");
+      } else {
+        setTimeLeft(0);
+        setIsRunning(false);
+        setCurrentPhase("setup");
+      }
+    }
+  }, [currentSession, viewMode, appMode]);
+
   const fetchData = async () => {
     try {
       if (viewMode === "daily") {
@@ -462,7 +866,139 @@ function MemoApp() {
       }
     } catch (err) {
       console.error("Error fetching data:", err)
-      generateMockData()
+    }
+  }
+
+  const fetchSessionData = async () => {
+    // Session data is handled from backend
+    try {
+      if (viewMode === "daily") {
+        await fetchDailySessionData()
+      } else if (viewMode === "weekly") {
+        await fetchWeeklySessionData()
+      } else if (viewMode === "monthly") {
+        await fetchMonthlySessionData()
+      }
+    } catch (err) {
+      console.error("Error fetching data:", err)
+    }
+  }
+
+  function parseSession(session: any): PomodoroSession {
+    return {
+      ...session,
+      started_at: session.started_at ? new Date(session.started_at?.endsWith?.("Z") ? session.started_at : session.started_at + "Z") : undefined,
+      created_at: new Date(session.created_at?.endsWith?.("Z") ? session.created_at : session.created_at + "Z"),
+      updated_at: session.updated_at ? new Date(session.updated_at?.endsWith?.("Z") ? session.updated_at : session.updated_at + "Z") : undefined,
+    }
+  }
+
+  // 2. fetch 함수 추가
+  const fetchCurrentSession = async () => {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/session/current`;
+      const res = await apiCall(url);
+      if (res && res.ok) {
+        const data = await res.json();
+        setCurrentSession(parseSession(data));
+      } else {
+        setCurrentSession(null); // 404 처리 시에도 null
+      }
+    } catch (err) {
+      setCurrentSession(null);
+      console.error("Error fetching current session:", err);
+    }
+  };
+
+  // 1. 일간 세션 데이터
+  const fetchDailySessionData = async () => {
+    const dateStr = formatLocalDate(currentDate)
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/session/list?tz=${encodeURIComponent(timeZone)}&start_date=${dateStr}&end_date=${dateStr}`
+      const res = await apiCall(url)
+      if (res && res.ok) {
+        const data = await res.json()
+        setSessions((data || []).map(parseSession))
+      }
+    } catch (err) {
+      console.error("Error fetching daily session data:", err)
+    }
+  }
+
+  // 2. 주간 세션 데이터
+  const fetchWeeklySessionData = async () => {
+    const startOfWeek = new Date(currentDate)
+    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
+    const endOfWeek = new Date(startOfWeek)
+    endOfWeek.setDate(startOfWeek.getDate() + 6)
+
+    const startDateStr = formatLocalDate(startOfWeek)
+    const endDateStr = formatLocalDate(endOfWeek)
+
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/session/list?tz=${encodeURIComponent(timeZone)}&start_date=${startDateStr}&end_date=${endDateStr}`
+      const res = await apiCall(url)
+      if (res && res.ok) {
+        const sessions = await res.json()
+        const parsedSessions = (sessions || []).map(parseSession)
+        // 날짜별 그룹핑
+        const groupedSessions: { [key: string]: PomodoroSession[] } = {}
+        parsedSessions.forEach((session: PomodoroSession) => {
+          const localSessionDate = convertUtcToLocalDate(session.created_at, timeZone)
+          if (!groupedSessions[localSessionDate]) {
+            groupedSessions[localSessionDate] = []
+          }
+          groupedSessions[localSessionDate].push(session)
+        })
+        setWeeklySessionData(groupedSessions)
+        setSessions(parsedSessions)
+      }
+    } catch (err) {
+      console.error("Error fetching weekly session data:", err)
+    }
+  }
+
+  // 3. 월간 세션 데이터
+  const fetchMonthlySessionData = async () => {
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
+
+    const startDateStr = formatLocalDate(firstDay)
+    const endDateStr = formatLocalDate(lastDay)
+
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/session/list?tz=${encodeURIComponent(timeZone)}&start_date=${startDateStr}&end_date=${endDateStr}`
+      const res = await apiCall(url)
+      if (res && res.ok) {
+        const sessions = await res.json()
+        const parsedSessions = (sessions || []).map(parseSession)
+        // 날짜별 집계
+        const groupedData: { [key: string]: { session_count: number; total_focus_time: number } } = {}
+        parsedSessions.forEach((session: PomodoroSession) => {
+          const localSessionDate = convertUtcToLocalDate(session.created_at, timeZone)
+          if (!groupedData[localSessionDate]) {
+            groupedData[localSessionDate] = { session_count: 0, total_focus_time: 0 }
+          }
+          groupedData[localSessionDate].session_count++
+          if (session.completed) {
+            groupedData[localSessionDate].total_focus_time += session.duration
+          }
+        })
+        setMonthlySessionData(groupedData)
+        setSessions(parsedSessions)
+      }
+    } catch (err) {
+      console.error("Error fetching monthly session data:", err)
+    }
+  }
+
+  function parseMemo(memo: any): Memo {
+    return {
+      ...memo,
+      created_at: new Date(memo.created_at?.endsWith?.("Z") ? memo.created_at : memo.created_at + "Z"),
+      updated_at: new Date(memo.updated_at?.endsWith?.("Z") ? memo.updated_at : memo.updated_at + "Z"),
     }
   }
 
@@ -476,7 +1012,7 @@ function MemoApp() {
       const res = await apiCall(url)
       if (res && res.ok) {
         const data = await res.json()
-        setMemos(data || [])
+        setMemos((data || []).map(parseMemo))
       }
 
       // Fetch daily summary (if available)
@@ -502,9 +1038,10 @@ function MemoApp() {
       if (res && res.ok) {
         const memos = await res.json()
 
+        const parsedMemos = (memos || []).map(parseMemo)
         // Group memos by date using local timezone
         const groupedMemos: { [key: string]: Memo[] } = {}
-        memos.forEach((memo: Memo) => {
+        parsedMemos.forEach((memo: Memo) => {
           const localMemoDate = convertUtcToLocalDate(memo.created_at, timeZone)
           if (!groupedMemos[localMemoDate]) {
             groupedMemos[localMemoDate] = []
@@ -535,9 +1072,10 @@ function MemoApp() {
       if (res && res.ok) {
         const memos = await res.json()
 
+        const parsedMemos = (memos || []).map(parseMemo)
         // Group memos by date and count using local timezone
         const groupedData: { [key: string]: { memo_count: number; has_summary: boolean } } = {}
-        memos.forEach((memo: Memo) => {
+        parsedMemos.forEach((memo: Memo) => {
           const localMemoDate = convertUtcToLocalDate(memo.created_at, timeZone)
           if (!groupedData[localMemoDate]) {
             groupedData[localMemoDate] = { memo_count: 0, has_summary: false }
@@ -569,40 +1107,40 @@ function MemoApp() {
     }
   }
 
-  const generateMockData = () => {
-    // Mock data generation for development
-    const mockMemos: Memo[] = [
-      {
-        id: "1",
-        user_id: "user1",
-        content:
-          "React 18의 새로운 Concurrent Features에 대해 공부했다.\n\n## 주요 특징\n- **Suspense**: 데이터 로딩 상태 관리\n- **Concurrent Rendering**: 우선순위 기반 렌더링\n- `useTransition` 훅으로 상태 업데이트 최적화\n\n정말 흥미로운 기능들이다!",
-        attachments: [],
-        tags: ["react", "study"],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        category: "study",
-        category_confidence: 0.95,
-      },
-    ]
-    setMemos(mockMemos)
 
-    // Mock daily summary for today
-    if (viewMode === "daily" && currentDate.toDateString() === new Date().toDateString()) {
-      const mockSummary: DailySummary = {
-        date: formatLocalDate(currentDate),
-        ai_comment: "오늘은 주로 학습과 아이디어 정리에 집중하신 하루였네요. 특히 React 관련 내용이 많았습니다.",
-        category_summaries: [
-          {
-            category: "study",
-            summary: "React 18의 Concurrent Features에 대해 학습",
-            memo_count: 1,
-          },
-        ],
-        total_memos: 1,
-        created_at: new Date().toISOString(),
+  const createNewCategory = async (name: string, isForEdit = false) => {
+    if (!name.trim()) return
+
+    try {
+      const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/categories/custom`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: name.toLowerCase().replace(/\s+/g, "_"),
+          name: name.trim(),
+          description: `사용자 정의 카테고리: ${name.trim()}`,
+          icon: "lightbulb",
+          color: "#F59E0B",
+        }),
+      })
+
+      if (res && res.ok) {
+        const newCategory = await res.json()
+        await fetchCustomCategories()
+
+        if (isForEdit) {
+          setEditSelectedCategory(newCategory.key)
+          setShowEditNewCategoryInput(false)
+          setShowEditCategorySelector(false)
+        } else {
+          setSelectedCategory(newCategory.key)
+          setShowNewCategoryInput(false)
+          setShowCategorySelector(false)
+        }
+        setNewCategoryName("")
       }
-      setDailySummary(mockSummary)
+    } catch (err) {
+      console.error("Failed to create category:", err)
     }
   }
 
@@ -614,6 +1152,11 @@ function MemoApp() {
     const formData = new FormData()
     formData.append("content", inputText)
     formData.append("tags", allTags.join(","))
+
+    // 선택된 카테고리 추가
+    if (selectedCategory) {
+      formData.append("category", selectedCategory)
+    }
 
     // Add image attachments with proper naming convention
     inputAttachments.images.forEach((file, index) => {
@@ -651,6 +1194,11 @@ function MemoApp() {
     const formData = new FormData()
     formData.append("content", editText)
     formData.append("tags", allEditTags.join(","))
+
+    // 선택된 카테고리 추가
+    if (editSelectedCategory !== null) {
+      formData.append("category", editSelectedCategory)
+    }
 
     editAttachments.newImages.forEach((file, index) => {
       formData.append(`new_image_${index}`, file)
@@ -690,6 +1238,115 @@ function MemoApp() {
     } catch (err) {
       console.error("Delete failed:", err)
     }
+  }
+
+  // Pomodoro session functions with backend integration
+  const startSession = async (sessionData: { subject: string; goal: string; duration: number; tags: string[] }) => {
+    const breakDuration = getBreakDuration(sessionData.duration)
+
+    const newSession: PomodoroSession = {
+      id: '', // Will be set by backend
+      user_id: user?.email || '',
+      subject: sessionData.subject,
+      goal: sessionData.goal,
+      duration: sessionData.duration,
+      break_duration: breakDuration,
+      tags: sessionData.tags,
+      created_at: new Date(),
+      updated_at: new Date(),
+      status: 'pending',
+      completed: false
+    }
+
+    const createdSession = await createSessionInBackend(newSession);
+    if (createdSession) {
+        const convertedSession = {
+            ...createdSession,
+            started_at: createdSession.started_at ? new Date(createdSession.started_at) : undefined,
+            created_at: new Date(createdSession.created_at),
+            updated_at: createdSession.updated_at ? new Date(createdSession.updated_at) : new Date(),
+        };
+        setCurrentSession(convertedSession);
+        setTimeLeft(convertedSession.duration * 60);
+        setCurrentPhase("focus");
+        setIsRunning(false);
+    }
+  }
+
+  const toggleTimer = async () => {
+    if (!currentSession) return
+
+    const newRunningState = !isRunning
+    setIsRunning(newRunningState)
+
+    if (newRunningState) {
+      // Starting timer
+      const newStatus = currentSession.status === 'pending' ? 'started' : 'started'
+      await updateSessionStatus(currentSession.id, newStatus)
+
+      // Update started_at if this is the first start
+      if (currentSession.status === 'pending') {
+        setCurrentSession(prev => prev ? {
+          ...prev,
+          status: 'started',
+          started_at: new Date(),
+          updated_at: new Date()
+        } : null)
+      }
+    } else {
+      // Pausing timer
+      await updateSessionStatus(currentSession.id, 'paused')
+      setCurrentSession(prev => prev ? {
+        ...prev,
+        status: 'paused',
+        updated_at: new Date()
+      } : null)
+    }
+  }
+
+  const resetTimer = async () => {
+    if (currentSession) {
+      await updateSessionStatus(currentSession.id, 'pending')
+      setCurrentSession(prev => prev ? {
+        ...prev,
+        status: 'pending',
+        updated_at: new Date()
+      } : null)
+    }
+    setIsRunning(false)
+    if (currentSession) {
+      if (currentPhase === "focus") {
+        setTimeLeft(currentSession.duration * 60)
+      } else if (currentPhase === "break") {
+        setTimeLeft(currentSession.break_duration * 60)
+      }
+    }
+  }
+
+  const cancelCurrentTask = async () => {
+    if (currentSession) {
+      // Update session status to cancelled
+      await updateSessionStatus(currentSession.id, 'cancelled')
+    }
+
+    setIsRunning(false)
+    setCurrentPhase("setup")
+    setCurrentSession(null)
+    setTimeLeft(0)
+  }
+
+  const handleReflectionSubmit = async (sessionId: string) => {
+    const reflection = sessionReflections[sessionId]
+    if (!reflection?.trim()) return
+
+    await updateSessionReflection(sessionId, reflection.trim())
+
+    // Clear the reflection input
+    setSessionReflections(prev => {
+      const newReflections = { ...prev }
+      delete newReflections[sessionId]
+      return newReflections
+    })
   }
 
   const startRecording = async () => {
@@ -813,6 +1470,10 @@ function MemoApp() {
     setCurrentTag("")
     setInputAttachments({ images: [], audios: [] })
     setShowImageOptions(false)
+    setSelectedCategory(null)
+    setShowCategorySelector(false)
+    setNewCategoryName("")
+    setShowNewCategoryInput(false)
   }
 
   const resetDetailState = () => {
@@ -822,6 +1483,9 @@ function MemoApp() {
     setEditTags([])
     setEditCurrentTag("")
     setEditAttachments({ existing: [], newImages: [], newAudios: [] })
+    setEditSelectedCategory(null)
+    setShowEditCategorySelector(false)
+    setShowEditNewCategoryInput(false)
   }
 
   const addTag = () => {
@@ -888,15 +1552,13 @@ function MemoApp() {
     }
   }
 
-  // Categories present in current memos
   const memoCategories = useMemo(() => {
-    const cats = memos.map((m) => m.category || "uncategorized")
+    const cats = memos.map((m) => m.category).filter(Boolean)
     return Array.from(new Set(cats))
   }, [memos])
 
   const filteredMemos = memos.filter((memo) => {
-    const memoKey = memo.category || "uncategorized"
-    if (categoryFilter && memoKey !== categoryFilter) {
+    if (categoryFilter && memo.category !== categoryFilter) {
       return false
     }
     if (searchQuery) {
@@ -908,21 +1570,6 @@ function MemoApp() {
     return true
   })
 
-  const updateMemoCategory = async (memoId: string, newCategory: string) => {
-    try {
-      const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/memo/${memoId}/category`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: newCategory }),
-      })
-      if (res && res.ok) {
-        fetchData()
-      }
-    } catch (err) {
-      console.error("Update category failed:", err)
-    }
-  }
-
   // Helper function to truncate content at first line break
   const truncateAtLineBreak = (content: string, maxLength = 100) => {
     const firstLineBreak = content.indexOf("\n")
@@ -933,6 +1580,62 @@ function MemoApp() {
       return { text: content.substring(0, maxLength), truncated: true }
     }
     return { text: content, truncated: false }
+  }
+
+  // Session statistics functions
+  const getTodayStats = () => {
+    const today = formatLocalDate(currentDate)
+    const todaySessions = sessions.filter(session =>
+      formatLocalDate(new Date(session.created_at)) === today
+    )
+    const completedSessions = todaySessions.filter(s => s.completed)
+
+    return {
+      totalFocusTime: completedSessions.reduce((acc, session) => acc + session.duration, 0),
+      sessionsCompleted: completedSessions.length,
+      totalSessions: todaySessions.length,
+      sessions: todaySessions
+    }
+  }
+
+  const getWeeklyStats = () => {
+    const startOfWeek = new Date(currentDate)
+    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
+    const endOfWeek = new Date(startOfWeek)
+    endOfWeek.setDate(startOfWeek.getDate() + 6)
+
+    const weekSessions = sessions.filter(session => {
+      const sessionDate = new Date(session.created_at)
+      return sessionDate >= startOfWeek && sessionDate <= endOfWeek
+    })
+    const completedSessions = weekSessions.filter(s => s.completed)
+
+    return {
+      totalFocusTime: completedSessions.reduce((acc, session) => acc + session.duration, 0),
+      sessionsCompleted: completedSessions.length,
+      totalSessions: weekSessions.length,
+      sessions: weekSessions
+    }
+  }
+
+  const getMonthlyStats = () => {
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
+
+    const monthSessions = sessions.filter(session => {
+      const sessionDate = new Date(session.created_at)
+      return sessionDate >= firstDay && sessionDate <= lastDay
+    })
+    const completedSessions = monthSessions.filter(s => s.completed)
+
+    return {
+      totalFocusTime: completedSessions.reduce((acc, session) => acc + session.duration, 0),
+      sessionsCompleted: completedSessions.length,
+      totalSessions: monthSessions.length,
+      sessions: monthSessions
+    }
   }
 
   const renderDailySummary = () => {
@@ -1024,9 +1727,133 @@ function MemoApp() {
     )
   }
 
+  // Session daily summary with statistics
+  const renderSessionDailySummary = () => {
+    const todayStats = getTodayStats()
+
+    if (todayStats.totalSessions === 0) {
+      return (
+        <div className="mb-6 backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-gray-500 to-slate-500 flex items-center justify-center">
+              <Timer className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-white font-semibold">오늘의 세션</h3>
+              <p className="text-white/60 text-sm">세션이 없습니다</p>
+            </div>
+          </div>
+          <div className="text-center py-8">
+            <p className="text-white/70 text-lg mb-2">아직 진행된 세션이 없어요</p>
+            <p className="text-white/50 text-sm">새로운 포모도로 세션을 시작해보세요</p>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="mb-6 backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
+            <Timer className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="text-white font-semibold">오늘의 세션 통계</h3>
+            <p className="text-white/60 text-sm">{todayStats.totalSessions}개의 세션</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="text-center p-3 rounded-xl bg-white/5">
+            <div className="text-2xl font-bold text-white mb-1">{todayStats.totalFocusTime}분</div>
+            <div className="text-white/60 text-sm">총 집중 시간</div>
+          </div>
+          <div className="text-center p-3 rounded-xl bg-white/5">
+            <div className="text-2xl font-bold text-white mb-1">{todayStats.sessionsCompleted}개</div>
+            <div className="text-white/60 text-sm">완료된 세션</div>
+          </div>
+          <div className="text-center p-3 rounded-xl bg-white/5">
+            <div className="text-2xl font-bold text-white mb-1">{todayStats.totalSessions - todayStats.sessionsCompleted}개</div>
+            <div className="text-white/60 text-sm">진행중/중단</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Session weekly summary with statistics
+  const renderSessionWeeklySummary = () => {
+    const weeklyStats = getWeeklyStats()
+
+    return (
+      <div className="mb-6 backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
+            <BarChart3 className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="text-white font-semibold">이번 주 세션 통계</h3>
+            <p className="text-white/60 text-sm">{weeklyStats.totalSessions}개의 세션</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center p-3 rounded-xl bg-white/5">
+            <div className="text-2xl font-bold text-white mb-1">{weeklyStats.totalFocusTime}분</div>
+            <div className="text-white/60 text-sm">총 집중 시간</div>
+          </div>
+          <div className="text-center p-3 rounded-xl bg-white/5">
+            <div className="text-2xl font-bold text-white mb-1">{weeklyStats.sessionsCompleted}개</div>
+            <div className="text-white/60 text-sm">완료된 세션</div>
+          </div>
+          <div className="text-center p-3 rounded-xl bg-white/5">
+            <div className="text-2xl font-bold text-white mb-1">{Math.round(weeklyStats.totalFocusTime / 7)}분</div>
+            <div className="text-white/60 text-sm">일평균 집중</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Session monthly summary with statistics
+  const renderSessionMonthlySummary = () => {
+    const monthlyStats = getMonthlyStats()
+    const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()
+    const dailyAverage = Math.round(monthlyStats.totalFocusTime / daysInMonth)
+
+    return (
+      <div className="mb-6 backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
+            <Grid3X3 className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="text-white font-semibold">이번 달 세션 통계</h3>
+            <p className="text-white/60 text-sm">{monthlyStats.totalSessions}개의 세션</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center p-3 rounded-xl bg-white/5">
+            <div className="text-2xl font-bold text-white mb-1">{monthlyStats.totalFocusTime}분</div>
+            <div className="text-white/60 text-sm">총 집중 시간</div>
+          </div>
+          <div className="text-center p-3 rounded-xl bg-white/5">
+            <div className="text-2xl font-bold text-white mb-1">{monthlyStats.sessionsCompleted}개</div>
+            <div className="text-white/60 text-sm">완료된 세션</div>
+          </div>
+          <div className="text-center p-3 rounded-xl bg-white/5">
+            <div className="text-2xl font-bold text-white mb-1">{dailyAverage}분</div>
+            <div className="text-white/60 text-sm">일평균 집중</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const renderMemoCard = (memo: Memo) => {
-    const category = categories[memo.category || "uncategorized"] || CATEGORIES.uncategorized
-    const utcCreated = memo.created_at.endsWith("Z") ? new Date(memo.created_at) : new Date(memo.created_at + "Z")
+    const category = memo.category ? categories[memo.category] || CATEGORIES.uncategorized : null
+    const utcCreated = typeof memo.created_at === "string" ? new Date(memo.created_at.endsWith("Z") ? memo.created_at : memo.created_at + "Z") : memo.created_at
     const time = utcCreated.toLocaleString(locale, {
       timeZone,
       month: "short",
@@ -1051,18 +1878,26 @@ function MemoApp() {
         {/* Header with category and time */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <div
-              className={`w-8 h-8 rounded-full ${category.bgColor} flex items-center justify-center flex-shrink-0`}
-              style={{ color: category.color }}
-            >
-              {category.icon}
-            </div>
-            <div>
-              <span className="text-sm font-medium text-white/90">{category.name}</span>
-              {memo.category_confidence && (
-                <span className="text-xs text-white/60 ml-2">{Math.round(memo.category_confidence * 100)}%</span>
-              )}
-            </div>
+            {category ? (
+              <>
+                <div
+                  className={`w-8 h-8 rounded-full ${category.bgColor} flex items-center justify-center flex-shrink-0`}
+                  style={{ color: category.color }}
+                >
+                  {category.icon}
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-white/90">{category.name}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-gray-500/20 flex items-center justify-center flex-shrink-0">
+                  <Clock className="w-4 h-4 text-gray-400" />
+                </div>
+                <span className="text-sm font-medium text-white/60">카테고리 없음</span>
+              </div>
+            )}
           </div>
           <span className="text-xs text-white/60">{time}</span>
         </div>
@@ -1138,6 +1973,8 @@ function MemoApp() {
     )
   }
 
+
+
   const renderWeeklyView = () => {
     const startOfWeek = new Date(currentDate)
     startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
@@ -1151,98 +1988,153 @@ function MemoApp() {
 
     return (
       <div className="space-y-4">
+        {/* Weekly Summary */}
+        {appMode === "session" && renderSessionWeeklySummary()}
+
         {weekDays.map((day, index) => {
           const dateStr = formatLocalDate(day)
           const dayName = day.toLocaleDateString(locale, { weekday: "short" })
           const dayNumber = day.getDate()
-          const dayMemos = weeklyData[dateStr] || []
           const isToday = day.toDateString() === new Date().toDateString()
 
-          // Group memos by category for display
-          const categoryGroups: { [key: string]: number } = {}
-          dayMemos.forEach((memo) => {
-            const category = memo.category || "uncategorized"
-            categoryGroups[category] = (categoryGroups[category] || 0) + 1
-          })
+          if (appMode === "memo") {
+            const dayMemos = weeklyData[dateStr] || []
 
-          // Find daily summary for this date
-          // Use dailySummary only if its date matches
-          let summaryForDay = null
-          if (dailySummary && dailySummary.date === dateStr) {
-            summaryForDay = dailySummary
-          }
+            // Group memos by category for display
+            const categoryGroups: { [key: string]: number } = {}
+            dayMemos.forEach((memo) => {
+              const category = memo.category || "uncategorized"
+              categoryGroups[category] = (categoryGroups[category] || 0) + 1
+            })
 
-          return (
-            <div
-              key={index}
-              className={`backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-4 cursor-pointer hover:bg-white/15 transition-all duration-200 ${
-                isToday ? "ring-2 ring-blue-400/50" : ""
-              }`}
-              onClick={() => {
-                setSelectedDate(dateStr)
-                setViewMode("daily")
-                setCurrentDate(day)
-              }}
-            >
-              <div className="flex items-center justify-between my-2">
-                {/* Date block */}
-                <div className="flex flex-col justify-center items-center mr-6">
-                  <div className="text-white/80 text-xs font-medium">{dayName}</div>
-                  <div className="text-white text-lg font-bold">{dayNumber}</div>
-                </div>
-                {/* Summary and category counts */}
-                <div className="flex-1">
-                  {dayMemos.length > 0 ? (
-                    summaryForDay ? (
-                      <p className="text-white/80 text-sm">{summaryForDay.ai_comment}</p>
+            // Find daily summary for this date
+            let summaryForDay = null
+            if (dailySummary && dailySummary.date === dateStr) {
+              summaryForDay = dailySummary
+            }
+
+            return (
+              <div
+                key={index}
+                className={`backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-4 cursor-pointer hover:bg-white/15 transition-all duration-200 ${
+                  isToday ? "ring-2 ring-blue-400/50" : ""
+                }`}
+                onClick={() => {
+                  setSelectedDate(dateStr)
+                  setViewMode("daily")
+                  setCurrentDate(day)
+                }}
+              >
+                <div className="flex items-center justify-between my-2">
+                  {/* Date block */}
+                  <div className="flex flex-col justify-center items-center mr-6">
+                    <div className="text-white/80 text-xs font-medium">{dayName}</div>
+                    <div className="text-white text-lg font-bold">{dayNumber}</div>
+                  </div>
+                  {/* Summary and category counts */}
+                  <div className="flex-1">
+                    {dayMemos.length > 0 ? (
+                      summaryForDay ? (
+                        <p className="text-white/80 text-sm">{summaryForDay.ai_comment}</p>
+                      ) : (
+                        <p className="text-white/80 text-sm">요약 생성 중...</p>
+                      )
                     ) : (
-                      <p className="text-white/80 text-sm">요약 생성 중...</p>
-                    )
-                  ) : (
-                    <div className="text-white/60 text-sm">메모가 없습니다</div>
-                  )}
-                  {Object.keys(categoryGroups).length > 0 && (
-                    <div className="flex gap-2 flex-wrap mt-4">
-                      {Object.entries(categoryGroups).map(([categoryKey, count]) => {
-                        const category = categories[categoryKey] || CATEGORIES.uncategorized
-                        return (
-                          <div key={categoryKey} className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/10">
-                            <div
-                              className="w-3 h-3 rounded-full flex items-center justify-center"
-                              style={{ backgroundColor: category.color }}
-                            >
-                              <div className="w-1.5 h-1.5 rounded-full bg-white/80" />
+                      <div className="text-white/60 text-sm">메모가 없습니다</div>
+                    )}
+                    {Object.keys(categoryGroups).length > 0 && (
+                      <div className="flex gap-2 flex-wrap mt-4">
+                        {Object.entries(categoryGroups).map(([categoryKey, count]) => {
+                          const category = categories[categoryKey] || CATEGORIES.uncategorized
+                          return (
+                            <div key={categoryKey} className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/10">
+                              <div
+                                className="w-3 h-3 rounded-full flex items-center justify-center"
+                                style={{ backgroundColor: category.color }}
+                              >
+                                <div className="w-1.5 h-1.5 rounded-full bg-white/80" />
+                              </div>
+                              <span className="text-xs text-white/70">{count}</span>
                             </div>
-                            <span className="text-xs text-white/70">{count}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )
+            )
+          } else {
+            // Session mode
+            const daySessions = weeklySessionData[dateStr] || []
+            const completedSessions = daySessions.filter(s => s.completed)
+            const totalFocusTime = completedSessions.reduce((acc, session) => acc + session.duration, 0)
+
+            return (
+              <div
+                key={index}
+                className={`backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-4 cursor-pointer hover:bg-white/15 transition-all duration-200 ${
+                  isToday ? "ring-2 ring-blue-400/50" : ""
+                }`}
+                onClick={() => {
+                  setSelectedDate(dateStr)
+                  setViewMode("daily")
+                  setCurrentDate(day)
+                }}
+              >
+                <div className="flex items-center justify-between my-2">
+                  {/* Date block */}
+                  <div className="flex flex-col justify-center items-center mr-6">
+                    <div className="text-white/80 text-xs font-medium">{dayName}</div>
+                    <div className="text-white text-lg font-bold">{dayNumber}</div>
+                  </div>
+                  {/* Session summary */}
+                  <div className="flex-1">
+                    {daySessions.length > 0 ? (
+                      <div>
+                        <p className="text-white/80 text-sm">{completedSessions.length}개 세션 완료 • {totalFocusTime}분 집중</p>
+                        <div className="flex gap-2 flex-wrap mt-2">
+                          {daySessions.slice(0, 2).map((session) => (
+                            <div key={session.id} className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/10">
+                              <Timer className="w-3 h-3 text-purple-400" />
+                              <span className="text-xs text-white/70">{session.duration}분</span>
+                            </div>
+                          ))}
+                          {daySessions.length > 2 && (
+                            <div className="px-2 py-1 rounded-full bg-white/10">
+                              <span className="text-xs text-white/70">+{daySessions.length - 2}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-white/60 text-sm">세션이 없습니다</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          }
         })}
       </div>
     )
   }
 
-  const getIntensityLevel = (memoCount: number) => {
-    if (memoCount === 0) return 0
-    if (memoCount <= 2) return 1
-    if (memoCount <= 5) return 2
-    if (memoCount <= 10) return 3
+  const getIntensityLevel = (count: number) => {
+    if (count === 0) return 0
+    if (count <= 2) return 1
+    if (count <= 5) return 2
+    if (count <= 10) return 3
     return 4
   }
 
   const getIntensityColor = (level: number) => {
     const colors = [
-      "bg-white/5 border-white/10", // 0 memos
-      "bg-blue-500/20 border-blue-400/30", // 1-2 memos
-      "bg-blue-500/40 border-blue-400/50", // 3-5 memos
-      "bg-blue-500/60 border-blue-400/70", // 6-10 memos
-      "bg-blue-500/80 border-blue-400/90", // 10+ memos
+      "bg-white/5 border-white/10", // 0
+      "bg-blue-500/20 border-blue-400/30", // 1-2
+      "bg-blue-500/40 border-blue-400/50", // 3-5
+      "bg-blue-500/60 border-blue-400/70", // 6-10
+      "bg-blue-500/80 border-blue-400/90", // 10+
     ]
     return colors[level] || colors[0]
   }
@@ -1269,35 +2161,29 @@ function MemoApp() {
     }
 
     // Calculate statistics
-    const totalMemos = Object.values(monthlyData).reduce((sum, data) => sum + data.memo_count, 0)
-    const activeDays = Object.keys(monthlyData).length
-    const maxMemos = Math.max(...Object.values(monthlyData).map((data) => data.memo_count), 0)
+    let totalCount = 0
+    let activeDays = 0
+    let maxCount = 0
+
+    if (appMode === "memo") {
+      totalCount = Object.values(monthlyData).reduce((sum, data) => sum + data.memo_count, 0)
+      activeDays = Object.keys(monthlyData).length
+      maxCount = Math.max(...Object.values(monthlyData).map((data) => data.memo_count), 0)
+    } else {
+      totalCount = Object.values(monthlySessionData).reduce((sum, data) => sum + data.session_count, 0)
+      activeDays = Object.keys(monthlySessionData).length
+      maxCount = Math.max(...Object.values(monthlySessionData).map((data) => data.session_count), 0)
+    }
 
     return (
       <div className="space-y-6">
-        {/* Monthly Statistics */}
-        <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-4">
-          <h3 className="text-white font-semibold mb-4">이번 달 통계</h3>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-white mb-1">{totalMemos}</div>
-              <div className="text-white/60 text-sm">총 메모</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-white mb-1">{activeDays}</div>
-              <div className="text-white/60 text-sm">활동일</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-white mb-1">{maxMemos}</div>
-              <div className="text-white/60 text-sm">최대 메모</div>
-            </div>
-          </div>
-        </div>
+        {/* Monthly Summary */}
+        {appMode === "session" && renderSessionMonthlySummary()}
 
         {/* Calendar Grid */}
         <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-white font-semibold">메모 활동</h3>
+            <h3 className="text-white font-semibold">{appMode === "memo" ? "메모 활동" : "세션 활동"}</h3>
             <div className="flex items-center gap-2 text-xs text-white/60">
               <span>적음</span>
               <div className="flex gap-1">
@@ -1322,11 +2208,19 @@ function MemoApp() {
               <div key={weekIndex} className="grid grid-cols-7 gap-1">
                 {week.map((day, dayIndex) => {
                   const dateStr = formatLocalDate(day)
-                  const dayData = monthlyData[dateStr]
                   const isCurrentMonth = day.getMonth() === month
                   const isToday = day.toDateString() === new Date().toDateString()
-                  const memoCount = dayData?.memo_count || 0
-                  const intensityLevel = getIntensityLevel(memoCount)
+
+                  let count = 0
+                  if (appMode === "memo") {
+                    const dayData = monthlyData[dateStr]
+                    count = dayData?.memo_count || 0
+                  } else {
+                    const dayData = monthlySessionData[dateStr]
+                    count = dayData?.session_count || 0
+                  }
+
+                  const intensityLevel = getIntensityLevel(count)
 
                   return (
                     <div
@@ -1340,11 +2234,11 @@ function MemoApp() {
                           setCurrentDate(day)
                         }
                       }}
-                      title={`${day.getDate()}일 - ${memoCount}개 메모`}
+                      title={`${day.getDate()}일 - ${count}개 ${appMode === "memo" ? "메모" : "세션"}`}
                     >
                       <div className="font-medium">{day.getDate()}</div>
-                      {memoCount > 0 && (
-                        <div className="text-xs text-white/80 mt-0.5">{memoCount > 99 ? "99+" : memoCount}</div>
+                      {count > 0 && (
+                        <div className="text-xs text-white/80 mt-0.5">{count > 99 ? "99+" : count}</div>
                       )}
                     </div>
                   )
@@ -1360,23 +2254,23 @@ function MemoApp() {
           <div className="space-y-2 text-sm text-white/70">
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-sm bg-white/5 border border-white/10" />
-              <span>메모 없음</span>
+              <span>{appMode === "memo" ? "메모" : "세션"} 없음</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-sm bg-blue-500/20 border border-blue-400/30" />
-              <span>1-2개 메모</span>
+              <span>1-2개 {appMode === "memo" ? "메모" : "세션"}</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-sm bg-blue-500/40 border border-blue-400/50" />
-              <span>3-5개 메모</span>
+              <span>3-5개 {appMode === "memo" ? "메모" : "세션"}</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-sm bg-blue-500/60 border border-blue-400/70" />
-              <span>6-10개 메모</span>
+              <span>6-10개 {appMode === "memo" ? "메모" : "세션"}</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-sm bg-blue-500/80 border border-blue-400/90" />
-              <span>10개 이상 메모</span>
+              <span>10개 이상 {appMode === "memo" ? "메모" : "세션"}</span>
             </div>
           </div>
         </div>
@@ -1395,7 +2289,7 @@ function MemoApp() {
       <div className="max-w-md mx-auto relative min-h-screen overscroll-none">
         {/* Header */}
         <div
-          className={`sticky top-0 z-20 backdrop-blur-2xl bg-white/20 border border-white/20 shadow-lg transition-all duration-300 rounded-b-3xl ${
+          className={`sticky top-0 z-20  backdrop-blur-2xl bg-white/20 border border-white/20 shadow-lg transition-all duration-300 rounded-b-3xl ${
             isScrolled ? "p-2" : "p-4"
           }`}
           style={{ ["--header-height" as any]: `${headerHeight}px` }}
@@ -1407,39 +2301,72 @@ function MemoApp() {
               className={`transition-all duration-300 ${isScrolled ? "h-6" : "h-8"}`}
             />
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowInput(true)}
-                className={`rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white shadow-lg hover:scale-105 transition-all ${
-                  isScrolled ? "w-8 h-8" : "w-10 h-10"
-                }`}
-              >
-                <Plus className={`${isScrolled ? "w-4 h-4" : "w-5 h-5"}`} />
-              </button>
+              {/* App Mode Toggle */}
+              <div className="flex rounded-lg bg-white/10 p-1">
+                <button
+                  onClick={() => setAppMode("memo")}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                    appMode === "memo" ? "bg-white/20 text-white" : "text-white/70 hover:text-white"
+                  }`}
+                >
+                  <Edit3 className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => setAppMode("session")}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                    appMode === "session" ? "bg-white/20 text-white" : "text-white/70 hover:text-white"
+                  }`}
+                >
+                  <Timer className="w-3 h-3" />
+                </button>
+              </div>
 
-              <button
-                onClick={() => {
-                  const next = !inlineSearchActive
-                  setInlineSearchActive(next)
-                  if (!next) setSearchQuery("")
-                }}
-                className={`rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-all ${
-                  isScrolled ? "w-8 h-8" : "w-10 h-10"
-                }`}
-              >
-                <Search className={`${isScrolled ? "w-4 h-4" : "w-5 h-5"}`} />
-              </button>
+              {appMode === "memo" && (
+                <>
+                  <button
+                    onClick={() => setShowInput(true)}
+                    className={`rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white shadow-lg hover:scale-105 transition-all ${
+                      isScrolled ? "w-8 h-8" : "w-10 h-10"
+                    }`}
+                  >
+                    <Plus className={`${isScrolled ? "w-4 h-4" : "w-5 h-5"}`} />
+                  </button>
 
-              {inlineSearchActive && (
-                <div className="flex items-center transition-all duration-300 max-w-xs opacity-100">
-                  <input
-                    type="text"
-                    placeholder="Search memos..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-3 pr-2 py-1 rounded-lg bg-white/20 text-white placeholder-white/60 focus:outline-none"
-                    autoFocus
-                  />
-                </div>
+                  <button
+                    onClick={() => {
+                      const next = !inlineSearchActive
+                      setInlineSearchActive(next)
+                      if (!next) setSearchQuery("")
+                    }}
+                    className={`rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-all ${
+                      isScrolled ? "w-8 h-8" : "w-10 h-10"
+                    }`}
+                  >
+                    <Search className={`${isScrolled ? "w-4 h-4" : "w-5 h-5"}`} />
+                  </button>
+
+                  {inlineSearchActive && (
+                    <div className="flex items-center transition-all duration-300 max-w-xs opacity-100">
+                      <input
+                        type="text"
+                        placeholder="Search memos..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-3 pr-2 py-1 rounded-lg bg-white/20 text-white placeholder-white/60 focus:outline-none"
+                        autoFocus
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
+              {appMode === "session" && (
+                  <button
+                    onClick={() => setShowSessionTimer((prev) => !prev)}
+                    className="ml-2 p-2 rounded-full bg-white/10 hover:bg-white/20 transition"
+                  >
+                    <Timer className="w-5 h-5 text-purple-400" />
+                  </button>
               )}
 
               <div className="relative">
@@ -1483,125 +2410,236 @@ function MemoApp() {
             </div>
           </div>
 
-          {/* View Mode Navigation */}
-          <div className="mb-4">
-            <div className="flex gap-2">
-              <button
-                onClick={() => setViewMode("daily")}
-                className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                  viewMode === "daily" ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
-                }`}
-              >
-                <Calendar className="w-4 h-4" />
-                일간
-              </button>
-              <button
-                onClick={() => setViewMode("weekly")}
-                className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                  viewMode === "weekly" ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
-                }`}
-              >
-                <BarChart3 className="w-4 h-4" />
-                주간
-              </button>
-              <button
-                onClick={() => setViewMode("monthly")}
-                className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                  viewMode === "monthly" ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
-                }`}
-              >
-                <Grid3X3 className="w-4 h-4" />
-                월간
-              </button>
-            </div>
-          </div>
-
-          {/* Date Navigation */}
-          <div className="flex items-center justify-between mb-4">
-            <button
-              onClick={() => navigateDate("prev")}
-              className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-all"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-
-            <div className="text-center">
-              <h2 className="text-white font-semibold text-lg">{formatDateHeader()}</h2>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={goToToday}
-                className="px-3 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20 transition-all"
-              >
-                오늘
-              </button>
-              <button
-                onClick={() => navigateDate("next")}
-                className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-all"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Category Filter - only show in daily view */}
-          {viewMode === "daily" && (
-            <div
-              className={`transition-all duration-300 overflow-hidden ${
-                isScrolled ? "max-h-0 opacity-0" : "max-h-96 opacity-100"
-              }`}
-            >
-              <div className="flex gap-2 overflow-x-auto pb-2">
+          {/* Navigation - 공통으로 사용 */}
+          <>
+            {/* View Mode Navigation */}
+            <div className="mb-4">
+              <div className="flex gap-2">
                 <button
-                  onClick={() => setCategoryFilter(null)}
-                  className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-                    categoryFilter === null ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
+                  onClick={() => setViewMode("daily")}
+                  className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                    viewMode === "daily" ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
                   }`}
                 >
-                  전체
+                  <Calendar className="w-4 h-4" />
+                  일간
                 </button>
-                {memoCategories.map((key) => {
-                  const config = categories[key] || CATEGORIES.uncategorized
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => setCategoryFilter(key)}
-                      className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
-                        categoryFilter === key ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
-                      }`}
-                    >
-                      {config.icon}
-                      {config.name}
-                    </button>
-                  )
-                })}
+                <button
+                  onClick={() => setViewMode("weekly")}
+                  className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                    viewMode === "weekly" ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  주간
+                </button>
+                <button
+                  onClick={() => setViewMode("monthly")}
+                  className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                    viewMode === "monthly" ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
+                  }`}
+                >
+                  <Grid3X3 className="w-4 h-4" />
+                  월간
+                </button>
               </div>
             </div>
-          )}
+
+            {/* Date Navigation */}
+            <div className="flex items-center justify-between mb-4">
+              <button
+                onClick={() => navigateDate("prev")}
+                className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-all"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+
+              <div className="text-center">
+                <h2 className="text-white font-semibold text-lg">{formatDateHeader()}</h2>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={goToToday}
+                  className="px-3 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20 transition-all"
+                >
+                  오늘
+                </button>
+                <button
+                  onClick={() => navigateDate("next")}
+                  className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-all"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Category Filter - only show in daily view for memo mode */}
+            {appMode === "memo" && viewMode === "daily" && (
+              <div
+                className={`transition-all duration-300 overflow-hidden ${
+                  isScrolled ? "max-h-0 opacity-0" : "max-h-96 opacity-100"
+                }`}
+              >
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  <button
+                    onClick={() => setCategoryFilter(null)}
+                    className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+                      categoryFilter === null ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    전체
+                  </button>
+                  {memoCategories.map((key) => {
+                    const config = categories[key] || CATEGORIES.uncategorized
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => setCategoryFilter(key)}
+                        className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                          categoryFilter === key ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
+                        }`}
+                      >
+                        {config.icon}
+                        {config.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </>
         </div>
 
         {/* Content */}
+     {showSessionTimer && (
+       <>
+         {/* Overlay to close on outside click */}
+         <div
+           className="fixed inset-0 z-40"
+           onMouseDown={() => setShowSessionTimer(false)}
+           onTouchStart={() => setShowSessionTimer(false)}
+         />
+             <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+
+         <Draggable
+           nodeRef={timerRef}
+           enableUserSelectHack={false}
+           cancel="button, input, textarea, select, option, .circular-timer"
+          //  defaultPosition={{ x: 0, y: 0 }}
+         >
+           <div
+             ref={timerRef}
+            className="relative bg-black/100 p-4 rounded-xl shadow-lg cursor-grab pointer-events-auto"
+
+             style={{ touchAction: "none" }}
+             onMouseDown={(e) => e.stopPropagation()}
+             onTouchStart={(e) => { e.stopPropagation(); }}
+           >
+             {/* Drag handle */}
+             <div className="drag-handle mx-auto mb-2 w-12 h-1 bg-gray-300 rounded cursor-move" />
+
+             {/* Timer content */}
+             <div className="circular-timer">
+               <CircularTimer
+                 duration={currentSession?.duration || 25}
+                 timeLeft={timeLeft}
+                 isRunning={isRunning}
+                 isBreak={currentPhase === "break"}
+                 onToggle={toggleTimer}
+                 onReset={resetTimer}
+                 onCancel={currentPhase !== "setup" ? cancelCurrentTask : undefined}
+                 sessionTitle={currentSession?.subject}
+                 sessionGoal={currentSession?.goal}
+                 sessionTags={currentSession?.tags}
+                 sessionStartTime={currentSession?.started_at}
+                 onStartSession={startSession}
+               />
+             </div>
+           </div>
+         </Draggable>
+          </div>
+       </>
+     )}
         <div className="p-4 pb-32">
-          {viewMode === "daily" && (
+          {appMode === "memo" ? (
             <>
-              {renderDailySummary()}
-              {filteredMemos.length === 0 && memos.length > 0 ? (
-                <div className="text-center py-20">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/10 flex items-center justify-center">
-                    <Search className="w-8 h-8 text-white/50" />
-                  </div>
-                  <p className="text-white/70 text-lg mb-2">검색 결과가 없습니다</p>
-                  <p className="text-white/50 text-sm">다른 검색어나 필터를 시도해보세요</p>
-                </div>
-              ) : (
-                memos.length > 0 && <div className="space-y-4">{filteredMemos.map(renderMemoCard)}</div>
+              {viewMode === "daily" && (
+                <>
+                  {renderDailySummary()}
+                  {filteredMemos.length === 0 && memos.length > 0 ? (
+                    <div className="text-center py-20">
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/10 flex items-center justify-center">
+                        <Search className="w-8 h-8 text-white/50" />
+                      </div>
+                      <p className="text-white/70 text-lg mb-2">검색 결과가 없습니다</p>
+                      <p className="text-white/50 text-sm">다른 검색어나 필터를 시도해보세요</p>
+                    </div>
+                  ) : (
+                    memos.length > 0 && <div className="space-y-4">{filteredMemos.map(renderMemoCard)}</div>
+                  )}
+                </>
               )}
+
+              {viewMode === "weekly" && renderWeeklyView()}
+              {viewMode === "monthly" && renderMonthlyView()}
+            </>
+          ) : (
+            /* Session Mode Content */
+            <>
+              {viewMode === "daily" && (
+                <>
+                  {renderSessionDailySummary()}
+
+                  {/* Current Session Timer */}
+                  {/* <div className="mb-6">
+                    <CircularTimer
+                      duration={currentSession?.duration || 25}
+                      timeLeft={timeLeft}
+                      isRunning={isRunning}
+                      isBreak={currentPhase === "break"}
+                      onToggle={toggleTimer}
+                      onReset={resetTimer}
+                      onCancel={currentPhase !== "setup" ? cancelCurrentTask : undefined}
+                      sessionTitle={currentSession?.subject}
+                      sessionGoal={currentSession?.goal}
+                      sessionTags={currentSession?.tags}
+                      sessionStartTime={currentSession?.started_at}
+                      onStartSession={startSession}
+                    />
+                  </div> */}
+
+                  {/* Daily Sessions List */}
+                  {(() => {
+                    const today = formatLocalDate(currentDate)
+                    const todaySessions = sessions.filter(session =>
+                      formatLocalDate(new Date(session.created_at)) === today
+                    )
+
+                    return todaySessions.length > 0 && (
+                      <div className="space-y-4">
+                        {todaySessions.map(session => (
+                        <SessionCard
+                          key={session.id}
+                          session={session}
+                          timeZone={timeZone}
+                          locale={locale}
+                          sessionReflections={sessionReflections}
+                          setSessionReflections={setSessionReflections}
+                          handleReflectionSubmit={handleReflectionSubmit}
+                          deleteSessionFromBackend={deleteSessionFromBackend}
+                        />
+                      ))}
+                      </div>
+                    )
+                  })()}
+                </>
+              )}
+
+              {viewMode === "weekly" && renderWeeklyView()}
+              {viewMode === "monthly" && renderMonthlyView()}
             </>
           )}
-
-          {viewMode === "weekly" && renderWeeklyView()}
-          {viewMode === "monthly" && renderMonthlyView()}
         </div>
 
         {/* Input Modal */}
@@ -1657,6 +2695,104 @@ function MemoApp() {
                   ))}
                 </div>
               )}
+
+              {/* Category Selection */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-white/80 text-sm">카테고리</label>
+                  <button
+                    onClick={() => setShowCategorySelector(!showCategorySelector)}
+                    className="text-blue-400 text-sm hover:text-blue-300"
+                  >
+                    {selectedCategory ? categories[selectedCategory]?.name || "선택됨" : "선택하기"}
+                  </button>
+                </div>
+
+                {selectedCategory && (
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-white/10">
+                    <div
+                      className={`w-6 h-6 rounded-full ${categories[selectedCategory]?.bgColor} flex items-center justify-center`}
+                      style={{ color: categories[selectedCategory]?.color }}
+                    >
+                      {categories[selectedCategory]?.icon}
+                    </div>
+                    <span className="text-white text-sm">{categories[selectedCategory]?.name}</span>
+                    <button
+                      onClick={() => setSelectedCategory(null)}
+                      className="ml-auto text-white/50 hover:text-white"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
+                {showCategorySelector && (
+                  <div className="mt-2 p-3 rounded-xl bg-white/5 border border-white/10">
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {Object.entries(categories).map(([key, config]) => (
+                        <button
+                          key={key}
+                          onClick={() => {
+                            setSelectedCategory(key)
+                            setShowCategorySelector(false)
+                          }}
+                          className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 transition-all"
+                        >
+                          <div
+                            className={`w-6 h-6 rounded-full ${config.bgColor} flex items-center justify-center`}
+                            style={{ color: config.color }}
+                          >
+                            {config.icon}
+                          </div>
+                          <span className="text-white text-sm">{config.name}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="mt-3 pt-3 border-t border-white/10">
+                      {showNewCategoryInput ? (
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="새 카테고리 이름"
+                            value={newCategoryName}
+                            onChange={(e) => setNewCategoryName(e.target.value)}
+                            className="flex-1 px-3 py-2 rounded-lg bg-white/10 text-white placeholder-white/60 text-sm"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                createNewCategory(newCategoryName, false)
+                              }
+                            }}
+                          />
+                          <button
+                            onClick={() => createNewCategory(newCategoryName, false)}
+                            className="px-3 py-2 rounded-lg bg-blue-500 text-white text-sm"
+                          >
+                            추가
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowNewCategoryInput(false)
+                              setNewCategoryName("")
+                            }}
+                            className="px-3 py-2 rounded-lg bg-white/10 text-white text-sm"
+                          >
+                            취소
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setShowNewCategoryInput(true)}
+                          className="w-full flex items-center justify-center gap-2 p-2 rounded-lg bg-white/10 text-white/80 hover:bg-white/15 transition-all"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span className="text-sm">새 카테고리 만들기</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Attachments Preview */}
               {(inputAttachments.images.length > 0 || inputAttachments.audios.length > 0) && (
@@ -1798,6 +2934,104 @@ function MemoApp() {
                     ))}
                   </div>
 
+                  {/* Edit Category Selection */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-white/80 text-sm">카테고리</label>
+                      <button
+                        onClick={() => setShowEditCategorySelector(!showEditCategorySelector)}
+                        className="text-blue-400 text-sm hover:text-blue-300"
+                      >
+                        {editSelectedCategory ? categories[editSelectedCategory]?.name || "선택됨" : "선택하기"}
+                      </button>
+                    </div>
+
+                    {editSelectedCategory && (
+                      <div className="flex items-center gap-2 p-2 rounded-lg bg-white/10">
+                        <div
+                          className={`w-6 h-6 rounded-full ${categories[editSelectedCategory]?.bgColor} flex items-center justify-center`}
+                          style={{ color: categories[editSelectedCategory]?.color }}
+                        >
+                          {categories[editSelectedCategory]?.icon}
+                        </div>
+                        <span className="text-white text-sm">{categories[editSelectedCategory]?.name}</span>
+                        <button
+                          onClick={() => setEditSelectedCategory(null)}
+                          className="ml-auto text-white/50 hover:text-white"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
+                    {showEditCategorySelector && (
+                      <div className="mt-2 p-3 rounded-xl bg-white/5 border border-white/10">
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                          {Object.entries(categories).map(([key, config]) => (
+                            <button
+                              key={key}
+                              onClick={() => {
+                                setEditSelectedCategory(key)
+                                setShowEditCategorySelector(false)
+                              }}
+                              className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 transition-all"
+                            >
+                              <div
+                                className={`w-6 h-6 rounded-full ${config.bgColor} flex items-center justify-center`}
+                                style={{ color: config.color }}
+                              >
+                                {config.icon}
+                              </div>
+                              <span className="text-white text-sm">{config.name}</span>
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="mt-3 pt-3 border-t border-white/10">
+                          {showEditNewCategoryInput ? (
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                placeholder="새 카테고리 이름"
+                                value={newCategoryName}
+                                onChange={(e) => setNewCategoryName(e.target.value)}
+                                className="flex-1 px-3 py-2 rounded-lg bg-white/10 text-white placeholder-white/60 text-sm"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    createNewCategory(newCategoryName, true)
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={() => createNewCategory(newCategoryName, true)}
+                                className="px-3 py-2 rounded-lg bg-blue-500 text-white text-sm"
+                              >
+                                추가
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowEditNewCategoryInput(false)
+                                  setNewCategoryName("")
+                                }}
+                                className="px-3 py-2 rounded-lg bg-white/10 text-white text-sm"
+                              >
+                                취소
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setShowEditNewCategoryInput(true)}
+                              className="w-full flex items-center justify-center gap-2 p-2 rounded-lg bg-white/10 text-white/80 hover:bg-white/15 transition-all"
+                            >
+                              <Plus className="w-4 h-4" />
+                              <span className="text-sm">새 카테고리 만들기</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Existing Attachments */}
                   {editAttachments.existing.length > 0 && (
                     <div className="mb-4">
@@ -1922,7 +3156,7 @@ function MemoApp() {
                     <button
                       onClick={isRecording ? stopRecording : startRecording}
                       className={`flex-1 py-3 rounded-xl border text-white hover:bg-white/15 transition-all flex items-center justify-center gap-2 ${
-                        isRecording ? "bg-red-500/20 border-red-500/30" : "bg-white/10 border-white/20"
+                    isRecording ? "bg-red-500/20 border-red-500/30" : "bg-white/10 border-white/20"
                       }`}
                     >
                       <Mic className="w-4 h-4" />
@@ -2044,9 +3278,7 @@ function MemoApp() {
                     <div className="text-white/60 text-xs text-right space-y-0.5">
                       <p>
                         작성일: {(() => {
-                          const utcDate = selectedMemo.created_at.endsWith("Z")
-                            ? new Date(selectedMemo.created_at)
-                            : new Date(selectedMemo.created_at + "Z")
+                          const utcDate = selectedMemo.created_at
                           return utcDate.toLocaleString(locale, {
                             timeZone,
                             year: "numeric",
@@ -2060,9 +3292,7 @@ function MemoApp() {
                       </p>
                       <p>
                         수정일: {(() => {
-                          const utcDate = selectedMemo.updated_at.endsWith("Z")
-                            ? new Date(selectedMemo.updated_at)
-                            : new Date(selectedMemo.updated_at + "Z")
+                          const utcDate = selectedMemo.updated_at
                           return utcDate.toLocaleString(locale, {
                             timeZone,
                             year: "numeric",
@@ -2083,6 +3313,7 @@ function MemoApp() {
                       setIsEditing(true)
                       setEditText(selectedMemo.content)
                       setEditTags(selectedMemo.tags)
+                      setEditSelectedCategory(selectedMemo.category || null)
                       setEditAttachments({
                         existing: selectedMemo.attachments,
                         newImages: [],
@@ -2189,7 +3420,7 @@ function MemoApp() {
 export default function HomePage() {
   return (
     <AuthGuard>
-      <MemoApp />
+      <MemoSessionApp />
     </AuthGuard>
   )
 }

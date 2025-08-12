@@ -1,12 +1,14 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { Play, Pause, RotateCcw, X, Plus, Clock, Calendar, Target } from 'lucide-react'
+import { Play, Pause, RotateCcw, X, Plus, Clock, Calendar, Target } from "lucide-react"
 
 interface CircularTimerProps {
   duration: number // in minutes
@@ -22,12 +24,7 @@ interface CircularTimerProps {
   sessionGoal?: string
   sessionTags?: string[]
   sessionStartTime?: Date
-  onStartSession?: (sessionData: {
-    subject: string
-    goal: string
-    duration: number
-    tags: string[]
-  }) => void
+  onUpdateSession?: (updates: any) => void
   onOpenSessionModal?: () => void
 }
 
@@ -45,21 +42,21 @@ export function CircularTimer({
   sessionGoal = "",
   sessionTags = [],
   sessionStartTime,
-  onStartSession,
-  onOpenSessionModal
+  onUpdateSession,
+  onOpenSessionModal,
 }: CircularTimerProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [dragAngle, setDragAngle] = useState(0)
-  const [showSessionModal, setShowSessionModal] = useState(false)
   const [showSessionDetail, setShowSessionDetail] = useState(false)
-  const [localDuration, setLocalDuration] = useState(25)
+  const [localDuration, setLocalDuration] = useState(duration)
   const svgRef = useRef<SVGSVGElement>(null)
 
-  // Session form states
-  const [subject, setSubject] = useState("")
-  const [goal, setGoal] = useState("")
-  const [selectedTags, setSelectedTags] = useState<string[]>([])
-  const [newTag, setNewTag] = useState("")
+  // Edit states
+  const [isEditing, setIsEditing] = useState(false)
+  const [editSubject, setEditSubject] = useState(sessionTitle)
+  const [editGoal, setEditGoal] = useState(sessionGoal || "")
+  const [editTags, setEditTags] = useState<string[]>(sessionTags || [])
+  const [editCurrentTag, setEditCurrentTag] = useState("")
 
   const radius = 120
   const center = 150
@@ -87,7 +84,7 @@ export function CircularTimer({
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, '0')}`
+    return `${mins}:${secs.toString().padStart(2, "0")}`
   }
 
   // Get mouse/touch position relative to center
@@ -98,8 +95,8 @@ export function CircularTimer({
     const centerX = rect.left + rect.width / 2
     const centerY = rect.top + rect.height / 2
 
-    const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX
-    const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY
+    const clientX = "touches" in event ? event.touches[0].clientX : event.clientX
+    const clientY = "touches" in event ? event.touches[0].clientY : event.clientY
 
     const x = clientX - centerX
     const y = clientY - centerY
@@ -110,63 +107,70 @@ export function CircularTimer({
     return angle
   }, [])
 
-  // Handle drag start
-  const handleDragStart = useCallback((event: React.MouseEvent | React.TouchEvent) => {
-    if (!effectiveSettingMode) return
+  // Handle drag start - only allow when session exists and not running
+  const handleDragStart = useCallback(
+    (event: React.MouseEvent | React.TouchEvent) => {
+      if (!sessionTitle || isRunning) return
 
-    event.preventDefault()
-    setIsDragging(true)
+      event.preventDefault()
+      setIsDragging(true)
 
-    const angle = Math.max(minAngle, getAngleFromEvent(event.nativeEvent as MouseEvent | TouchEvent))
-    setDragAngle(angle)
-    const newDuration = angleToMinutes(angle)
-    setLocalDuration(newDuration)
-
-    if (onDurationChange) {
-      onDurationChange(newDuration)
-    }
-  }, [effectiveSettingMode, getAngleFromEvent, onDurationChange, minAngle])
+      const angle = Math.max(minAngle, getAngleFromEvent(event.nativeEvent as MouseEvent | TouchEvent))
+      setDragAngle(angle)
+      const newDuration = angleToMinutes(angle)
+      setLocalDuration(newDuration)
+    },
+    [sessionTitle, isRunning, getAngleFromEvent, minAngle],
+  )
 
   // Handle drag move
   useEffect(() => {
     const handleDragMove = (event: MouseEvent | TouchEvent) => {
-      if (!isDragging || !effectiveSettingMode) return
+      if (!isDragging || !sessionTitle || isRunning) return
 
       event.preventDefault()
       const angle = Math.max(minAngle, getAngleFromEvent(event))
       setDragAngle(angle)
       const newDuration = angleToMinutes(angle)
       setLocalDuration(newDuration)
-
-      if (onDurationChange) {
-        onDurationChange(newDuration)
-      }
     }
 
     const handleDragEnd = () => {
+      if (isDragging && sessionTitle && !isRunning && onUpdateSession) {
+        // Update session duration in backend
+        onUpdateSession({ duration: localDuration })
+      }
       setIsDragging(false)
     }
 
     if (isDragging) {
-      document.addEventListener('mousemove', handleDragMove)
-      document.addEventListener('mouseup', handleDragEnd)
-      document.addEventListener('touchmove', handleDragMove)
-      document.addEventListener('touchend', handleDragEnd)
+      document.addEventListener("mousemove", handleDragMove)
+      document.addEventListener("mouseup", handleDragEnd)
+      document.addEventListener("touchmove", handleDragMove)
+      document.addEventListener("touchend", handleDragEnd)
     }
 
     return () => {
-      document.removeEventListener('mousemove', handleDragMove)
-      document.removeEventListener('mouseup', handleDragEnd)
-      document.removeEventListener('touchmove', handleDragMove)
-      document.removeEventListener('touchend', handleDragEnd)
+      document.removeEventListener("mousemove", handleDragMove)
+      document.removeEventListener("mouseup", handleDragEnd)
+      document.removeEventListener("touchmove", handleDragMove)
+      document.removeEventListener("touchend", handleDragEnd)
     }
-  }, [isDragging, effectiveSettingMode, getAngleFromEvent, onDurationChange, minAngle])
+  }, [isDragging, sessionTitle, isRunning, getAngleFromEvent, minAngle, localDuration, onUpdateSession])
 
-  // Initialize drag angle when component mounts
+  // Initialize drag angle when component mounts or duration changes
   useEffect(() => {
-    const initialAngle = Math.max(minAngle, (localDuration / 60) * 360)
+    const initialAngle = Math.max(minAngle, (duration / 60) * 360)
     setDragAngle(initialAngle)
-  }, [localDuration, minAngle])
+    setLocalDuration(duration)
+  }, [duration, minAngle])
+
+  // Update edit states when session changes
+  useEffect(() => {
+    setEditSubject(sessionTitle)
+    setEditGoal(sessionGoal || "")
+    setEditTags(sessionTags || [])
+  }, [sessionTitle, sessionGoal, sessionTags])
 
   // Create SVG path for the arc
   const createArcPath = (angle: number) => {
@@ -213,7 +217,7 @@ export function CircularTimer({
           stroke="#9ca3af"
           strokeWidth={tickWidth}
           strokeLinecap="round"
-        />
+        />,
       )
     }
     return ticks
@@ -236,64 +240,47 @@ export function CircularTimer({
           textAnchor="middle"
           dominantBaseline="middle"
           className="text-sm font-bold fill-white/70"
-          style={{ fontSize: '12px' }}
+          style={{ fontSize: "12px" }}
         >
           {i}
-        </text>
+        </text>,
       )
     }
     return labels
   }
 
-  const toggleTag = (tag: string) => {
-    setSelectedTags(prev =>
-      prev.includes(tag)
-        ? prev.filter(t => t !== tag)
-        : [...prev, tag]
-    )
-  }
-
-  const addCustomTag = () => {
-    if (newTag.trim() && !selectedTags.includes(newTag.trim())) {
-      const formattedTag = newTag.trim().startsWith('#') ? newTag.trim() : `#${newTag.trim()}`
-      setSelectedTags(prev => [...prev, formattedTag])
-      setNewTag("")
+  const addEditTag = () => {
+    if (editCurrentTag.trim() && !editTags.includes(editCurrentTag.trim())) {
+      const formattedTag = editCurrentTag.trim().startsWith("#") ? editCurrentTag.trim() : `#${editCurrentTag.trim()}`
+      setEditTags((prev) => [...prev, formattedTag])
+      setEditCurrentTag("")
     }
   }
 
-  const handleStartSession = () => {
-    if (!subject.trim() || !goal.trim()) {
-      return
-    }
+  const removeEditTag = (index: number) => {
+    setEditTags((prev) => prev.filter((_, i) => i !== index))
+  }
 
-    // 입력 필드에 내용이 있으면 자동으로 태그에 추가
-    let finalTags = [...selectedTags]
-    if (newTag.trim()) {
-      const formattedTag = newTag.trim().startsWith('#') ? newTag.trim() : `#${newTag.trim()}`
+  const handleSaveEdit = () => {
+    if (!editSubject.trim() || !editGoal.trim() || !onUpdateSession) return
+
+    // Add current tag if exists
+    const finalTags = [...editTags]
+    if (editCurrentTag.trim()) {
+      const formattedTag = editCurrentTag.trim().startsWith("#") ? editCurrentTag.trim() : `#${editCurrentTag.trim()}`
       if (!finalTags.includes(formattedTag)) {
         finalTags.push(formattedTag)
       }
     }
 
-    if (onStartSession) {
-      onStartSession({
-        subject,
-        goal,
-        duration: localDuration,
-        tags: finalTags
-      })
-    }
+    onUpdateSession({
+      subject: editSubject.trim(),
+      goal: editGoal.trim(),
+      tags: finalTags,
+    })
 
-    // Reset form
-    setSubject("")
-    setGoal("")
-    setSelectedTags([])
-    setNewTag("")
-    setShowSessionModal(false)
-  }
-
-  const handleNewSessionClick = () => {
-    setShowSessionModal(true)
+    setIsEditing(false)
+    setEditCurrentTag("")
   }
 
   const handleSessionTitleClick = () => {
@@ -307,28 +294,18 @@ export function CircularTimer({
       {/* Timer Container - 빨간색 테마 적용 */}
       <div className="relative mb-6">
         <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-3xl shadow-2xl p-6 relative mx-auto">
-
-          {/* Session Title or New Session Button */}
+          {/* Session Title or Edit Button */}
           <div className="absolute top-4 left-4 z-10">
             {sessionTitle ? (
               <button
                 onClick={handleSessionTitleClick}
                 className="backdrop-blur-md bg-white/20 hover:bg-white/30 border border-white/20 rounded-xl px-3 py-2 shadow-md max-w-32 transition-all duration-200 hover:scale-105"
               >
-                <div className="text-sm font-bold text-white truncate">
-                  {sessionTitle}
-                </div>
-                <div className="text-xs text-white/70 mt-1">
-                  상세보기
-                </div>
+                <div className="text-sm font-bold text-white truncate">{sessionTitle}</div>
+                <div className="text-xs text-white/70 mt-1">상세보기</div>
               </button>
             ) : (
-              <button
-                onClick={handleNewSessionClick}
-                className="backdrop-blur-md bg-white/20 hover:bg-white/30 border border-white/20 rounded-xl p-3 shadow-md transition-all duration-200 hover:scale-105"
-              >
-                <Plus className="w-5 h-5 text-white" />
-              </button>
+              <div className="text-sm text-white/60">세션이 없습니다</div>
             )}
           </div>
 
@@ -339,7 +316,7 @@ export function CircularTimer({
                 {effectiveSettingMode ? `${localDuration}분` : formatTime(timeLeft)}
               </div>
               <div className="text-xs text-white/70 text-center">
-                {effectiveSettingMode ? "설정" : (isBreak ? "휴식" : "집중")}
+                {effectiveSettingMode ? "설정" : isBreak ? "휴식" : "집중"}
               </div>
             </div>
           </div>
@@ -350,24 +327,32 @@ export function CircularTimer({
               ref={svgRef}
               width="300"
               height="300"
-              className={`${effectiveSettingMode ? 'cursor-pointer' : ''} touch-none`}
-              style={{ touchAction: 'none' }}
-              onMouseDownCapture={(e) => { e.preventDefault(); e.stopPropagation(); handleDragStart(e); }}
-              onTouchStartCapture={(e) => { e.preventDefault(); e.stopPropagation(); handleDragStart(e); }}
+              className={`${sessionTitle && !isRunning ? "cursor-pointer" : ""} touch-none`}
+              style={{ touchAction: "none" }}
+              onMouseDownCapture={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleDragStart(e)
+              }}
+              onTouchStartCapture={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleDragStart(e)
+              }}
             >
               <defs>
                 <filter id="innerShadow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feGaussianBlur in="SourceGraphic" stdDeviation="3"/>
-                  <feOffset dx="2" dy="2" result="offset"/>
-                  <feFlood floodColor="#000000" floodOpacity="0.2"/>
-                  <feComposite in2="offset" operator="in"/>
+                  <feGaussianBlur in="SourceGraphic" stdDeviation="3" />
+                  <feOffset dx="2" dy="2" result="offset" />
+                  <feFlood floodColor="#000000" floodOpacity="0.2" />
+                  <feComposite in2="offset" operator="in" />
                   <feMerge>
-                    <feMergeNode/>
-                    <feMergeNode in="SourceGraphic"/>
+                    <feMergeNode />
+                    <feMergeNode in="SourceGraphic" />
                   </feMerge>
                 </filter>
                 <filter id="dropShadow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feDropShadow dx="2" dy="2" stdDeviation="3" floodOpacity="0.3"/>
+                  <feDropShadow dx="2" dy="2" stdDeviation="3" floodOpacity="0.3" />
                 </filter>
                 <linearGradient id="focusGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stopColor="#ef4444" stopOpacity="0.9" />
@@ -417,11 +402,11 @@ export function CircularTimer({
                 filter="url(#dropShadow)"
               />
 
-              {/* Drag handle (setting mode only) - 빨간색 */}
-              {effectiveSettingMode && (
+              {/* Drag handle (when session exists and not running) - 빨간색 */}
+              {sessionTitle && !isRunning && (
                 <circle
-                  cx={center + radius * Math.cos((dragAngle - 90) * Math.PI / 180)}
-                  cy={center + radius * Math.sin((dragAngle - 90) * Math.PI / 180)}
+                  cx={center + radius * Math.cos(((dragAngle - 90) * Math.PI) / 180)}
+                  cy={center + radius * Math.sin(((dragAngle - 90) * Math.PI) / 180)}
                   r="12"
                   fill={isBreak ? "#22c55e" : "#ef4444"}
                   stroke="rgba(255, 255, 255, 0.8)"
@@ -435,15 +420,13 @@ export function CircularTimer({
             {/* Center Content - Status or Instructions */}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
               <div className="text-center">
-                {effectiveSettingMode ? (
+                {!sessionTitle ? (
                   <div className="text-sm text-white/80">
-                    <div className="font-semibold mb-1">드래그로 시간 설정</div>
-                    <div className="text-xs">5분 ~ 60분</div>
+                    <div className="font-semibold mb-1">세션을 생성하세요</div>
+                    <div className="text-xs">+ 버튼을 눌러 시작</div>
                   </div>
                 ) : (
-                  <div className="text-lg font-semibold text-white">
-                    {isRunning ? "진행 중" : "대기 중"}
-                  </div>
+                  <div className="text-lg font-semibold text-white">{isRunning ? "진행 중" : "대기 중"}</div>
                 )}
               </div>
             </div>
@@ -453,8 +436,9 @@ export function CircularTimer({
           <div className="flex justify-center gap-4 mt-4">
             {/* Start/Pause Button - 빨간색 */}
             <button
-              onClick={sessionTitle ? onToggle : handleNewSessionClick}
-              className="w-14 h-14 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 rounded-full shadow-lg flex items-center justify-center transition-all duration-200 active:scale-95"
+              onClick={onToggle}
+              disabled={!sessionTitle}
+              className="w-14 h-14 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 disabled:bg-gray-500 disabled:opacity-50 rounded-full shadow-lg flex items-center justify-center transition-all duration-200 active:scale-95"
             >
               {sessionTitle && isRunning ? (
                 <Pause className="w-6 h-6 text-white" />
@@ -484,208 +468,193 @@ export function CircularTimer({
         </div>
       </div>
 
-      {/* Session Setup Modal */}
-      {showSessionModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl shadow-2xl w-full max-w-sm max-h-[80vh] overflow-y-auto">
-            <div className="p-4">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between mb-4">
-                {/* <h2 className="text-2xl font-bold text-white">🍅 새 세션 설정</h2> */}
-                <button
-                  onClick={() => setShowSessionModal(false)}
-                  className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                >
-                  <X className="w-5 h-5 text-white" />
-                </button>
-              </div>
-
-              {/* Current Timer Setting Display */}
-              {/* <div className="mb-6 p-4 bg-white/10 border border-white/20 rounded-xl text-center">
-                <div className="text-sm text-white/70 mb-1">설정된 시간</div>
-                <div className="text-3xl font-bold text-white mb-1">{localDuration}분</div>
-                <div className="text-xs text-white/60 mt-1">타이머를 드래그해서 조정하세요</div>
-              </div> */}
-
-              {/* Subject Input */}
-              <div className="mb-4">
-                <Label htmlFor="subject" className="text-base font-semibold text-white">주제</Label>
-                <Input
-                  id="subject"
-                  placeholder="예: JWT refresh token 로직 작성"
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  className="mt-2 bg-white/10 border-white/20 text-white placeholder-white/60"
-                />
-              </div>
-
-              {/* Goal Input */}
-              <div className="mb-4">
-                <Label htmlFor="goal" className="text-base font-semibold text-white">목표</Label>
-                <Textarea
-                  id="goal"
-                  placeholder="예: /login 테스트까지 완료"
-                  value={goal}
-                  onChange={(e) => setGoal(e.target.value)}
-                  rows={2}
-                  className="mt-2 bg-white/10 border-white/20 text-white placeholder-white/60"
-                />
-              </div>
-
-              {/* Tags */}
-              <div className="mb-4">
-                <Label className="text-base font-semibold mb-3 block text-white">태그</Label>
-                <div className="flex gap-2 mb-3">
-                  <Input
-                    placeholder="새 태그 입력..."
-                    value={newTag}
-                    onChange={(e) => setNewTag(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && addCustomTag()}
-                    className="flex-1 bg-white/10 border-white/20 text-white placeholder-white/60"
-                  />
-                  <Button onClick={addCustomTag} variant="outline" size="sm" className="border-white/20 bg-white/10 text-white hover:bg-white/20">
-                    추가
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {selectedTags.map(tag => (
-                    <Badge
-                      key={tag}
-                      variant="secondary"
-                      className="cursor-pointer text-xs bg-white/20 text-white hover:bg-white/30"
-                      onClick={() => toggleTag(tag)}
-                    >
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-
-              {/* Action Buttons - 빨간색 테마 */}
-              <div className="flex gap-3">
-                <Button
-                  onClick={() => setShowSessionModal(false)}
-                  variant="outline"
-                  className="flex-1 border-white/20 bg-white/10 text-white hover:bg-white/20"
-                >
-                  취소
-                </Button>
-                <Button
-                  onClick={handleStartSession}
-                  className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white"
-                  disabled={!subject.trim() || !goal.trim()}
-                >
-                  세션 시작 ({localDuration}분)
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Session Detail Modal */}
       {showSessionDetail && sessionTitle && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl shadow-2xl w-full max-w-md">
+          <div className="backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto">
             <div className="p-6">
               {/* Modal Header */}
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-white">📋 세션 정보</h2>
-                <button
-                  onClick={() => setShowSessionDetail(false)}
-                  className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                >
-                  <X className="w-5 h-5 text-white" />
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setIsEditing(!isEditing)}
+                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                  >
+                    <Plus className="w-5 h-5 text-white" />
+                  </button>
+                  <button
+                    onClick={() => setShowSessionDetail(false)}
+                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                  >
+                    <X className="w-5 h-5 text-white" />
+                  </button>
+                </div>
               </div>
 
-              {/* Session Info */}
-              <div className="space-y-4">
-                {/* Title */}
-                <div className="flex items-start gap-3">
-                  <Target className="w-5 h-5 text-red-400 mt-1 flex-shrink-0" />
+              {isEditing ? (
+                /* Edit Mode */
+                <div className="space-y-4">
+                  {/* Subject Input */}
                   <div>
-                    <div className="text-sm font-semibold text-white/70 mb-1">주제</div>
-                    <div className="text-lg font-bold text-white">{sessionTitle}</div>
+                    <Label className="text-white/80 text-sm mb-2 block">주제</Label>
+                    <Input
+                      value={editSubject}
+                      onChange={(e) => setEditSubject(e.target.value)}
+                      className="bg-white/10 border-white/20 text-white placeholder-white/60"
+                    />
                   </div>
-                </div>
 
-                {/* Goal */}
-                {sessionGoal && (
-                  <div className="flex items-start gap-3">
-                    <Clock className="w-5 h-5 text-green-400 mt-1 flex-shrink-0" />
-                    <div>
-                      <div className="text-sm font-semibold text-white/70 mb-1">목표</div>
-                      <div className="text-white">{sessionGoal}</div>
+                  {/* Goal Input */}
+                  <div>
+                    <Label className="text-white/80 text-sm mb-2 block">목표</Label>
+                    <Textarea
+                      value={editGoal}
+                      onChange={(e) => setEditGoal(e.target.value)}
+                      rows={3}
+                      className="bg-white/10 border-white/20 text-white placeholder-white/60"
+                    />
+                  </div>
+
+                  {/* Tags Input */}
+                  <div>
+                    <Label className="text-white/80 text-sm mb-2 block">태그</Label>
+                    <div className="flex gap-2 mb-3">
+                      <Input
+                        placeholder="새 태그 입력..."
+                        value={editCurrentTag}
+                        onChange={(e) => setEditCurrentTag(e.target.value)}
+                        onKeyPress={(e) => e.key === "Enter" && addEditTag()}
+                        className="flex-1 bg-white/10 border-white/20 text-white placeholder-white/60"
+                      />
+                      <Button
+                        onClick={addEditTag}
+                        variant="outline"
+                        size="sm"
+                        className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+                      >
+                        추가
+                      </Button>
                     </div>
-                  </div>
-                )}
-
-                {/* Duration */}
-                <div className="flex items-start gap-3">
-                  <Calendar className="w-5 h-5 text-purple-400 mt-1 flex-shrink-0" />
-                  <div>
-                    <div className="text-sm font-semibold text-white/70 mb-1">설정 시간</div>
-                    <div className="text-white">{duration}분</div>
-                  </div>
-                </div>
-
-                {/* Start Time */}
-                {sessionStartTime && (
-                  <div className="flex items-start gap-3">
-                    <Clock className="w-5 h-5 text-orange-400 mt-1 flex-shrink-0" />
-                    <div>
-                      <div className="text-sm font-semibold text-white/70 mb-1">시작 시간</div>
-                      <div className="text-white">
-                        {new Date(sessionStartTime).toLocaleString('ko-KR', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Tags */}
-                {sessionTags && sessionTags.length > 0 && (
-                  <div>
-                    <div className="text-sm font-semibold text-white/70 mb-2">태그</div>
                     <div className="flex flex-wrap gap-2">
-                      {sessionTags.map(tag => (
-                        <Badge key={tag} variant="secondary" className="text-xs bg-white/20 text-white">
+                      {editTags.map((tag, index) => (
+                        <Badge
+                          key={index}
+                          variant="secondary"
+                          className="cursor-pointer text-xs bg-white/20 text-white hover:bg-white/30"
+                          onClick={() => removeEditTag(index)}
+                        >
                           {tag}
                         </Badge>
                       ))}
                     </div>
                   </div>
-                )}
 
-                {/* Current Status */}
-                <div className="mt-6 p-4 bg-white/10 border border-white/20 rounded-xl">
-                  <div className="text-sm font-semibold text-white/70 mb-2">현재 상태</div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-white">
-                      {isBreak ? "휴식 중" : "집중 중"} • {isRunning ? "진행 중" : "일시정지"}
-                    </span>
-                    <span className="text-2xl font-mono font-bold text-white">
-                      {formatTime(timeLeft)}
-                    </span>
+                  {/* Action Buttons */}
+                  <div className="flex gap-3 pt-4">
+                    <Button
+                      onClick={() => setIsEditing(false)}
+                      variant="outline"
+                      className="flex-1 border-white/20 bg-white/10 text-white hover:bg-white/20"
+                    >
+                      취소
+                    </Button>
+                    <Button
+                      onClick={handleSaveEdit}
+                      className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white"
+                      disabled={!editSubject.trim() || !editGoal.trim()}
+                    >
+                      저장
+                    </Button>
                   </div>
                 </div>
-              </div>
+              ) : (
+                /* View Mode */
+                <div className="space-y-4">
+                  {/* Title */}
+                  <div className="flex items-start gap-3">
+                    <Target className="w-5 h-5 text-red-400 mt-1 flex-shrink-0" />
+                    <div>
+                      <div className="text-sm font-semibold text-white/70 mb-1">주제</div>
+                      <div className="text-lg font-bold text-white">{sessionTitle}</div>
+                    </div>
+                  </div>
 
-              {/* Close Button - 빨간색 테마 */}
-              <div className="mt-6">
-                <Button
-                  onClick={() => setShowSessionDetail(false)}
-                  className="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white"
-                >
-                  확인
-                </Button>
-              </div>
+                  {/* Goal */}
+                  {sessionGoal && (
+                    <div className="flex items-start gap-3">
+                      <Clock className="w-5 h-5 text-green-400 mt-1 flex-shrink-0" />
+                      <div>
+                        <div className="text-sm font-semibold text-white/70 mb-1">목표</div>
+                        <div className="text-white">{sessionGoal}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Duration */}
+                  <div className="flex items-start gap-3">
+                    <Calendar className="w-5 h-5 text-purple-400 mt-1 flex-shrink-0" />
+                    <div>
+                      <div className="text-sm font-semibold text-white/70 mb-1">설정 시간</div>
+                      <div className="text-white">{duration}분</div>
+                    </div>
+                  </div>
+
+                  {/* Start Time */}
+                  {sessionStartTime && (
+                    <div className="flex items-start gap-3">
+                      <Clock className="w-5 h-5 text-orange-400 mt-1 flex-shrink-0" />
+                      <div>
+                        <div className="text-sm font-semibold text-white/70 mb-1">시작 시간</div>
+                        <div className="text-white">
+                          {new Date(sessionStartTime).toLocaleString("ko-KR", {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tags */}
+                  {sessionTags && sessionTags.length > 0 && (
+                    <div>
+                      <div className="text-sm font-semibold text-white/70 mb-2">태그</div>
+                      <div className="flex flex-wrap gap-2">
+                        {sessionTags.map((tag) => (
+                          <Badge key={tag} variant="secondary" className="text-xs bg-white/20 text-white">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Current Status */}
+                  <div className="mt-6 p-4 bg-white/10 border border-white/20 rounded-xl">
+                    <div className="text-sm font-semibold text-white/70 mb-2">현재 상태</div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-white">
+                        {isBreak ? "휴식 중" : "집중 중"} • {isRunning ? "진행 중" : "일시정지"}
+                      </span>
+                      <span className="text-2xl font-mono font-bold text-white">{formatTime(timeLeft)}</span>
+                    </div>
+                  </div>
+
+                  {/* Close Button - 빨간색 테마 */}
+                  <div className="mt-6">
+                    <Button
+                      onClick={() => setShowSessionDetail(false)}
+                      className="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white"
+                    >
+                      확인
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

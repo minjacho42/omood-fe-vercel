@@ -317,7 +317,17 @@ export function CircularTimer({
           <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10">
             <div className="backdrop-blur-md bg-black/30 border border-white/20 rounded-xl px-6 py-3 shadow-lg min-w-[200px]">
               <div className="text-center">
-                {sessionTitle && <div className="text-sm font-bold text-white mb-1 truncate">{sessionTitle}</div>}
+                {sessionTitle && (
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-sm font-bold text-white truncate flex-1">{sessionTitle}</div>
+                    <button
+                      onClick={handleSessionTitleClick}
+                      className="ml-2 px-2 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs text-white transition-all"
+                    >
+                      상세
+                    </button>
+                  </div>
+                )}
                 <div className="text-2xl font-mono font-bold text-white">
                   {effectiveSettingMode ? `${localDuration}분` : formatTime(timeLeft)}
                 </div>
@@ -367,7 +377,7 @@ export function CircularTimer({
           </div>
 
           {/* Timer Face */}
-          <div className="relative w-full h-full flex items-center justify-center py-8">
+          <div className="relative w-full h-full flex items-center justify-center py-16 mt-8">
             <svg
               ref={svgRef}
               width="300"

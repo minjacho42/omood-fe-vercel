@@ -18,11 +18,14 @@ import {
   Timer,
   CheckCircle,
   ChevronRight,
+  Edit,
+  Play,
+  Pause,
+  Square,
+  BookOpen,
 } from "lucide-react"
 import { SessionProgressCircle } from "@/components/session-progress-circle"
 import { Button } from "@/components/ui/button"
-import { motion, useAnimation } from "framer-motion"
-import { useDrag } from "@use-gesture/react"
 
 import type {
   Memo,
@@ -38,6 +41,7 @@ import { CATEGORIES } from "@/lib/constants"
 import { fetchUser, handleLogout } from "@/lib/api"
 import { useMemo as useMemoHook } from "@/hooks/use-memo"
 import { useSession } from "@/hooks/use-session"
+import { DraggableTimer } from "@/components/draggable-timer"
 
 interface SessionCardProps {
   session: PomodoroSession
@@ -296,26 +300,7 @@ function MemoSessionApp() {
     handleReflectionSubmit,
     deleteSessionFromBackend,
   }) => {
-    const controls = useAnimation()
-    const bgControls = useAnimation()
-
-    const bind = useDrag(({ down, movement: [mx], direction: [xDir], velocity: [vx] }) => {
-      const trigger = vx > 0.2 // If velocity is high, trigger action
-      const isSwipingLeft = xDir < 0
-
-      if (!down && trigger && isSwipingLeft) {
-        controls.start({ x: -80 })
-        bgControls.start({ opacity: 1 })
-      } else if (!down) {
-        controls.start({ x: 0 })
-        bgControls.start({ opacity: 0 })
-      }
-    })
-
-    const handleDeleteClick = async (e: React.MouseEvent) => {
-      e.stopPropagation()
-      await deleteSessionFromBackend(session.id)
-    }
+    const [showDetail, setShowDetail] = useState(false)
 
     const utcCreated =
       typeof session.created_at === "string"
@@ -365,108 +350,311 @@ function MemoSessionApp() {
       }
     }
 
+    if (showDetail) {
+      return (
+        <SessionDetailView
+          session={session}
+          onClose={() => setShowDetail(false)}
+          onDelete={deleteSessionFromBackend}
+          onUpdate={sessionHook.updateSession}
+          sessionReflections={sessionReflections}
+          setSessionReflections={setSessionReflections}
+          handleReflectionSubmit={handleReflectionSubmit}
+          locale={locale}
+          timeZone={timeZone}
+        />
+      )
+    }
+
     return (
-      <div key={session.id} className="relative overflow-hidden rounded-2xl">
-        <motion.div
-          animate={bgControls}
-          initial={{ opacity: 0 }}
-          className="absolute inset-y-0 right-0 w-24 bg-red-500 flex items-center justify-center"
-        >
-          <Button onClick={handleDeleteClick} className="bg-transparent hover:bg-red-600 p-4 rounded-full">
-            <Trash2 className="w-6 h-6 text-white" />
-          </Button>
-        </motion.div>
-        <motion.div
-          {...bind()}
-          animate={controls}
-          drag="x"
-          dragConstraints={{ left: -200, right: 0 }}
-          dragElastic={0.2}
-          className="relative z-10 backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-5 hover:bg-white/15 transition-all duration-200"
-        >
-          {/* Header with timer icon and time */}
-          <div className="flex items-center justify-between mb-4">
+      <div
+        key={session.id}
+        className="backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-5 hover:bg-white/15 transition-all duration-200 cursor-pointer"
+        onClick={() => setShowDetail(true)}
+      >
+        {/* Header with timer icon and time */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+              <Timer className="w-4 h-4 text-purple-400" />
+            </div>
+            <div>
+              <span className="text-sm font-medium text-white/90">포모도로 세션</span>
+            </div>
+          </div>
+          <span className="text-xs text-white/60">{time}</span>
+        </div>
+
+        {/* Session content */}
+        <div className="mb-4">
+          <h3 className="text-white font-semibold mb-2">{session.subject}</h3>
+          {session.goal && <p className="text-white/80 text-sm mb-3">{session.goal}</p>}
+
+          <div className="flex items-center gap-4 mb-3">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
-                <Timer className="w-4 h-4 text-purple-400" />
-              </div>
-              <div>
-                <span className="text-sm font-medium text-white/90">포모도로 세션</span>
-              </div>
+              <SessionProgressCircle duration={session.duration} size={32} />
+              <span className="text-white/70 text-sm">{session.duration}분</span>
             </div>
-            <span className="text-xs text-white/60">{time}</span>
+            <div className="flex items-center gap-2">
+              <div className={`w-3 h-3 rounded-full ${getStatusColor(session.status)}`} />
+              <span className="text-white/70 text-sm">{getStatusText(session.status)}</span>
+            </div>
           </div>
 
-          {/* Session content */}
-          <div className="mb-4">
-            <h3 className="text-white font-semibold mb-2">{session.subject}</h3>
-            {session.goal && <p className="text-white/80 text-sm mb-3">{session.goal}</p>}
-
-            <div className="flex items-center gap-4 mb-3">
-              <div className="flex items-center gap-2">
-                <SessionProgressCircle duration={session.duration} size={32} />
-                <span className="text-white/70 text-sm">{session.duration}분</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${getStatusColor(session.status)}`} />
-                <span className="text-white/70 text-sm">{getStatusText(session.status)}</span>
-              </div>
-            </div>
-
-            {session.reflection && (
-              <div className="text-sm text-white/70 bg-white/5 rounded-lg p-3 mb-3">
-                <p>
-                  <strong>회고:</strong> {session.reflection}
-                </p>
-              </div>
-            )}
-
-            {/* Reflection input for completed sessions without reflection */}
-            {session.status === "completed" && !session.reflection && (
-              <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
-                <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle className="w-4 h-4 text-green-400" />
-                  <span className="text-sm font-medium text-white">회고 작성</span>
-                </div>
-                <textarea
-                  placeholder="이 세션에서 무엇을 완료했나요? 어떤 점이 좋았고 개선할 점은 무엇인가요?"
-                  value={sessionReflections[session.id] || ""}
-                  onChange={(e) =>
-                    setSessionReflections((prev) => ({
-                      ...prev,
-                      [session.id]: e.target.value,
-                    }))
-                  }
-                  rows={3}
-                  className="w-full p-2 text-sm bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 resize-none mb-2"
-                />
-                <button
-                  onClick={() => handleReflectionSubmit(session.id)}
-                  disabled={!sessionReflections[session.id]?.trim()}
-                  className="w-full py-2 px-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:from-gray-500 disabled:to-gray-600 disabled:opacity-50 text-white text-sm rounded-lg transition-all"
-                >
-                  회고 저장
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Tags */}
-          {session.tags && session.tags.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {session.tags.slice(0, 3).map((tag, idx) => (
-                <span key={idx} className="text-xs px-3 py-1.5 rounded-full bg-white/15 text-white/80 font-medium">
-                  {tag}
-                </span>
-              ))}
-              {session.tags.length > 3 && (
-                <span className="text-xs px-3 py-1.5 rounded-full bg-white/10 text-white/60">
-                  +{session.tags.length - 3}
-                </span>
-              )}
+          {session.reflection && (
+            <div className="text-sm text-white/70 bg-white/5 rounded-lg p-3 mb-3">
+              <p>
+                <strong>회고:</strong> {session.reflection}
+              </p>
             </div>
           )}
-        </motion.div>
+
+          {/* Reflection input for completed sessions without reflection */}
+          {session.status === "completed" && !session.reflection && (
+            <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle className="w-4 h-4 text-green-400" />
+                <span className="text-sm font-medium text-white">회고 작성</span>
+              </div>
+              <textarea
+                placeholder="이 세션에서 무엇을 완료했나요? 어떤 점이 좋았고 개선할 점은 무엇인가요?"
+                value={sessionReflections[session.id] || ""}
+                onChange={(e) =>
+                  setSessionReflections((prev) => ({
+                    ...prev,
+                    [session.id]: e.target.value,
+                  }))
+                }
+                rows={3}
+                className="w-full p-2 text-sm bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 resize-none mb-2"
+              />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleReflectionSubmit(session.id)
+                }}
+                disabled={!sessionReflections[session.id]?.trim()}
+                className="w-full py-2 px-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:from-gray-500 disabled:to-gray-600 disabled:opacity-50 text-white text-sm rounded-lg transition-all"
+              >
+                회고 저장
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const SessionDetailView: React.FC<{
+    session: PomodoroSession
+    onClose: () => void
+    onDelete: (id: string) => void
+    onUpdate: (id: string, updates: Partial<PomodoroSession>) => void
+    sessionReflections: Record<string, string>
+    setSessionReflections: React.Dispatch<React.SetStateAction<Record<string, string>>>
+    handleReflectionSubmit: (id: string) => void
+    locale: string
+    timeZone: string
+  }> = ({
+    session,
+    onClose,
+    onDelete,
+    onUpdate,
+    sessionReflections,
+    setSessionReflections,
+    handleReflectionSubmit,
+    locale,
+    timeZone,
+  }) => {
+    const [editMode, setEditMode] = useState(false)
+    const [editData, setEditData] = useState({
+      subject: session.subject || "",
+      goal: session.goal || "",
+      tags: session.tags || "",
+      duration: session.duration || 25,
+    })
+
+    const canEdit = session.status === "pending" || session.status === "reviewed" || session.status === "completed"
+    const canEditDuration = session.status === "pending"
+
+    const handleSave = async () => {
+      await onUpdate(session.id, editData)
+      setEditMode(false)
+    }
+
+    const utcCreated =
+      typeof session.created_at === "string"
+        ? new Date(session.created_at.endsWith("Z") ? session.created_at : session.created_at + "Z")
+        : session.created_at
+    const time = utcCreated.toLocaleString(locale, {
+      timeZone,
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-gradient-to-br from-slate-800 to-purple-900 rounded-2xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-white">세션 상세</h2>
+            <div className="flex gap-2">
+              {canEdit && (
+                <Button
+                  onClick={() => setEditMode(!editMode)}
+                  className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-400/30"
+                >
+                  <Edit className="w-4 h-4" />
+                </Button>
+              )}
+              <Button
+                onClick={() => onDelete(session.id)}
+                className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-400/30"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+              <Button
+                onClick={onClose}
+                className="bg-gray-500/20 hover:bg-gray-500/30 text-gray-400 border border-gray-400/30"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="text-sm text-white/60">{time}</div>
+
+            {editMode ? (
+              <>
+                <div>
+                  <label className="block text-white/80 text-sm mb-2">주제</label>
+                  <input
+                    type="text"
+                    value={editData.subject}
+                    onChange={(e) => setEditData({ ...editData, subject: e.target.value })}
+                    className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60"
+                    placeholder="세션 주제를 입력하세요"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-white/80 text-sm mb-2">목표</label>
+                  <textarea
+                    value={editData.goal}
+                    onChange={(e) => setEditData({ ...editData, goal: e.target.value })}
+                    className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 resize-none"
+                    rows={3}
+                    placeholder="이 세션에서 달성하고 싶은 목표를 입력하세요"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-white/80 text-sm mb-2">태그</label>
+                  <input
+                    type="text"
+                    value={editData.tags}
+                    onChange={(e) => setEditData({ ...editData, tags: e.target.value })}
+                    className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60"
+                    placeholder="태그를 입력하세요 (쉼표로 구분)"
+                  />
+                </div>
+
+                {canEditDuration && (
+                  <div>
+                    <label className="block text-white/80 text-sm mb-2">시간 (분)</label>
+                    <input
+                      type="number"
+                      value={editData.duration}
+                      onChange={(e) => setEditData({ ...editData, duration: Number.parseInt(e.target.value) || 25 })}
+                      className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60"
+                      min="1"
+                      max="120"
+                    />
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Button onClick={handleSave} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white">
+                    저장
+                  </Button>
+                  <Button
+                    onClick={() => setEditMode(false)}
+                    className="flex-1 bg-gray-500 hover:bg-gray-600 text-white"
+                  >
+                    취소
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <h3 className="text-white font-semibold text-lg mb-2">{session.subject}</h3>
+                  {session.goal && <p className="text-white/80 mb-4">{session.goal}</p>}
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <SessionProgressCircle duration={session.duration} size={40} />
+                    <span className="text-white/70">{session.duration}분</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-3 h-3 rounded-full bg-${session.status === "completed" ? "green" : session.status === "started" ? "blue" : "gray"}-400`}
+                    />
+                    <span className="text-white/70">{session.status}</span>
+                  </div>
+                </div>
+
+                {session.tags && (
+                  <div className="flex flex-wrap gap-2">
+                    {session.tags.split(",").map((tag, index) => (
+                      <span key={index} className="px-2 py-1 bg-purple-500/20 text-purple-300 text-xs rounded-full">
+                        {tag.trim()}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {session.reflection && (
+                  <div className="bg-white/5 rounded-lg p-4">
+                    <h4 className="text-white font-medium mb-2">회고</h4>
+                    <p className="text-white/80">{session.reflection}</p>
+                  </div>
+                )}
+
+                {session.status === "completed" && !session.reflection && (
+                  <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                    <div className="flex items-center gap-2 mb-3">
+                      <CheckCircle className="w-4 h-4 text-green-400" />
+                      <span className="text-white font-medium">회고 작성</span>
+                    </div>
+                    <textarea
+                      placeholder="이 세션에서 무엇을 완료했나요? 어떤 점이 좋았고 개선할 점은 무엇인가요?"
+                      value={sessionReflections[session.id] || ""}
+                      onChange={(e) =>
+                        setSessionReflections((prev) => ({
+                          ...prev,
+                          [session.id]: e.target.value,
+                        }))
+                      }
+                      rows={4}
+                      className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 resize-none mb-3"
+                    />
+                    <Button
+                      onClick={() => handleReflectionSubmit(session.id)}
+                      disabled={!sessionReflections[session.id]?.trim()}
+                      className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:from-gray-500 disabled:to-gray-600 disabled:opacity-50 text-white"
+                    >
+                      회고 저장
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
       </div>
     )
   }
@@ -572,6 +760,21 @@ function MemoSessionApp() {
     document.documentElement.style.setProperty("--header-height", `${headerHeight}px`)
   }
 
+  // Session setup states
+  const [showSessionSetup, setShowSessionSetup] = useState(false)
+  const [sessionSetup, setSessionSetup] = useState({
+    subject: "",
+    goal: "",
+    tags: "",
+    duration: 25,
+  })
+
+  const handleCreateSession = async () => {
+    await sessionHook.createSession(sessionSetup)
+    setShowSessionSetup(false)
+    setSessionSetup({ subject: "", goal: "", tags: "", duration: 25 })
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overscroll-none">
       <div className="max-w-md mx-auto relative min-h-screen overscroll-none">
@@ -648,13 +851,190 @@ function MemoSessionApp() {
                 </>
               )}
 
+              {/* Replace timer setup with subject setup button and modify session creation flow */}
               {appMode === "session" && (
-                <button
-                  onClick={() => setShowSessionTimer((prev) => !prev)}
-                  className="ml-2 p-2 rounded-full bg-white/10 hover:bg-white/20 transition"
-                >
-                  <Timer className="w-5 h-5 text-purple-400" />
-                </button>
+                <div className="relative">
+                  {sessionHook.currentSession ? (
+                    <div className="bg-gradient-to-r from-purple-500/20 to-blue-500/20 backdrop-blur-md border border-white/20 rounded-3xl p-6 mb-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-purple-500/30 flex items-center justify-center">
+                            <Timer className="w-5 h-5 text-purple-300" />
+                          </div>
+                          <div>
+                            <h3 className="text-white font-semibold">{sessionHook.currentSession.subject}</h3>
+                            <p className="text-white/70 text-sm">{sessionHook.currentSession.goal}</p>
+                          </div>
+                        </div>
+                        {sessionHook.currentSession.status === "pending" && (
+                          <Button
+                            onClick={() => setShowSessionSetup(true)}
+                            className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-400/30"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-center mb-6">
+                        <DraggableTimer
+                          ref={timerRef}
+                          duration={sessionHook.currentSession.duration}
+                          onDurationChange={(newDuration) => {
+                            if (sessionHook.currentSession?.status === "pending") {
+                              sessionHook.updateSession(sessionHook.currentSession.id, { duration: newDuration })
+                            }
+                          }}
+                          isRunning={sessionHook.currentSession.status === "started"}
+                          isPaused={sessionHook.currentSession.status === "paused"}
+                          onComplete={() => sessionHook.completeSession(sessionHook.currentSession!.id)}
+                          disabled={sessionHook.currentSession.status !== "pending"}
+                        />
+                      </div>
+
+                      <div className="flex gap-3">
+                        {sessionHook.currentSession.status === "pending" && (
+                          <Button
+                            onClick={() => sessionHook.startSession(sessionHook.currentSession!.id)}
+                            className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-medium py-3 rounded-2xl"
+                          >
+                            <Play className="w-5 h-5 mr-2" />
+                            시작
+                          </Button>
+                        )}
+
+                        {sessionHook.currentSession.status === "started" && (
+                          <>
+                            <Button
+                              onClick={() => sessionHook.pauseSession(sessionHook.currentSession!.id)}
+                              className="flex-1 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white font-medium py-3 rounded-2xl"
+                            >
+                              <Pause className="w-5 h-5 mr-2" />
+                              일시정지
+                            </Button>
+                            <Button
+                              onClick={() => sessionHook.cancelSession(sessionHook.currentSession!.id)}
+                              className="flex-1 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white font-medium py-3 rounded-2xl"
+                            >
+                              <Square className="w-5 h-5 mr-2" />
+                              취소
+                            </Button>
+                          </>
+                        )}
+
+                        {sessionHook.currentSession.status === "paused" && (
+                          <>
+                            <Button
+                              onClick={() => sessionHook.resumeSession(sessionHook.currentSession!.id)}
+                              className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-medium py-3 rounded-2xl"
+                            >
+                              <Play className="w-5 h-5 mr-2" />
+                              재개
+                            </Button>
+                            <Button
+                              onClick={() => sessionHook.cancelSession(sessionHook.currentSession!.id)}
+                              className="flex-1 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white font-medium py-3 rounded-2xl"
+                            >
+                              <Square className="w-5 h-5 mr-2" />
+                              취소
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center mb-6">
+                      <Button
+                        onClick={() => setShowSessionSetup(true)}
+                        className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-medium py-4 px-8 rounded-2xl"
+                      >
+                        <BookOpen className="w-5 h-5 mr-2" />새 세션 만들기
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Session Setup Modal */}
+                  {showSessionSetup && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                      <div className="bg-gradient-to-br from-slate-800 to-purple-900 rounded-2xl p-6 max-w-md w-full">
+                        <div className="flex items-center justify-between mb-6">
+                          <h2 className="text-xl font-bold text-white">새 세션 설정</h2>
+                          <Button
+                            onClick={() => setShowSessionSetup(false)}
+                            className="bg-gray-500/20 hover:bg-gray-500/30 text-gray-400 border border-gray-400/30"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-white/80 text-sm mb-2">주제 *</label>
+                            <input
+                              type="text"
+                              value={sessionSetup.subject}
+                              onChange={(e) => setSessionSetup({ ...sessionSetup, subject: e.target.value })}
+                              className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60"
+                              placeholder="무엇에 집중하시겠습니까?"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-white/80 text-sm mb-2">목표</label>
+                            <textarea
+                              value={sessionSetup.goal}
+                              onChange={(e) => setSessionSetup({ ...sessionSetup, goal: e.target.value })}
+                              className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 resize-none"
+                              rows={3}
+                              placeholder="이 세션에서 달성하고 싶은 목표를 입력하세요"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-white/80 text-sm mb-2">태그</label>
+                            <input
+                              type="text"
+                              value={sessionSetup.tags}
+                              onChange={(e) => setSessionSetup({ ...sessionSetup, tags: e.target.value })}
+                              className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60"
+                              placeholder="태그를 입력하세요 (쉼표로 구분)"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-white/80 text-sm mb-2">시간 (분)</label>
+                            <input
+                              type="number"
+                              value={sessionSetup.duration}
+                              onChange={(e) =>
+                                setSessionSetup({ ...sessionSetup, duration: Number.parseInt(e.target.value) || 25 })
+                              }
+                              className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60"
+                              min="1"
+                              max="120"
+                            />
+                          </div>
+
+                          <div className="flex gap-3 pt-4">
+                            <Button
+                              onClick={handleCreateSession}
+                              disabled={!sessionSetup.subject.trim()}
+                              className="flex-1 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 disabled:from-gray-500 disabled:to-gray-600 disabled:opacity-50 text-white font-medium py-3 rounded-xl"
+                            >
+                              세션 생성
+                            </Button>
+                            <Button
+                              onClick={() => setShowSessionSetup(false)}
+                              className="flex-1 bg-gray-500/20 hover:bg-gray-500/30 text-gray-400 border border-gray-400/30 font-medium py-3 rounded-xl"
+                            >
+                              취소
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
 
               <div className="relative">
@@ -853,23 +1233,16 @@ function MemoSessionApp() {
                   <div className="space-y-4">
                     {sessionHook.sessions.length > 0 ? (
                       sessionHook.sessions.map((session) => (
-                        <div key={session.id} className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-white/80 text-sm">
-                              {new Date(session.created_at).toLocaleTimeString(locale, {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </span>
-                            <span className="text-white/60 text-xs">{session.focus_duration}분</span>
-                          </div>
-                          <p className="text-white">{session.task_description}</p>
-                          {session.reflection && (
-                            <div className="mt-3 p-3 bg-white/5 rounded-lg">
-                              <p className="text-white/80 text-sm">{session.reflection}</p>
-                            </div>
-                          )}
-                        </div>
+                        <SessionCard
+                          key={session.id}
+                          session={session}
+                          locale={locale}
+                          timeZone={timeZone}
+                          sessionReflections={sessionReflections}
+                          setSessionReflections={setSessionReflections}
+                          handleReflectionSubmit={sessionHook.submitReflection}
+                          deleteSessionFromBackend={sessionHook.deleteSession}
+                        />
                       ))
                     ) : (
                       <div className="text-center py-8">

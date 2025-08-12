@@ -58,9 +58,9 @@ export function CircularTimer({
   const [dragAngle, setDragAngle] = useState(0)
   const [showSessionModal, setShowSessionModal] = useState(false)
   const [showSessionDetail, setShowSessionDetail] = useState(false)
-  const [localDuration, setLocalDuration] = useState(25)
-  const svgRef = useRef<SVGSVGElement>(null)
   const [isEditingDuration, setIsEditingDuration] = useState(false)
+  const [localDuration, setLocalDuration] = useState(duration)
+  const svgRef = useRef<SVGSVGElement>(null)
 
   // Session form states
   const [subject, setSubject] = useState("")
@@ -132,11 +132,9 @@ export function CircularTimer({
       const newDuration = angleToMinutes(angle)
       setLocalDuration(newDuration)
 
-      if (onDurationChange) {
-        onDurationChange(newDuration)
-      }
+      // Don't call onDurationChange during drag - only update local state
     },
-    [effectiveSettingMode, getAngleFromEvent, onDurationChange, minAngle],
+    [effectiveSettingMode, getAngleFromEvent, minAngle],
   )
 
   // Handle drag move
@@ -150,9 +148,7 @@ export function CircularTimer({
       const newDuration = angleToMinutes(angle)
       setLocalDuration(newDuration)
 
-      if (onDurationChange) {
-        onDurationChange(newDuration)
-      }
+      // Don't call onDurationChange during drag - only update local state
     }
 
     const handleDragEnd = () => {
@@ -172,7 +168,7 @@ export function CircularTimer({
       document.removeEventListener("touchmove", handleDragMove)
       document.removeEventListener("touchend", handleDragEnd)
     }
-  }, [isDragging, effectiveSettingMode, getAngleFromEvent, onDurationChange, minAngle])
+  }, [isDragging, effectiveSettingMode, getAngleFromEvent, minAngle])
 
   // Initialize drag angle when component mounts
   useEffect(() => {
@@ -362,7 +358,7 @@ export function CircularTimer({
                 <div className="mt-2 flex gap-1">
                   <button
                     onClick={() => {
-                      // 백엔드에 duration 업데이트 요청
+                      // Only call onDurationChange when completing the edit
                       if (onDurationChange) {
                         onDurationChange(localDuration)
                       }

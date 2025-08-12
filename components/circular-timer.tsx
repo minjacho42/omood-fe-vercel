@@ -1,12 +1,14 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { Play, Pause, RotateCcw, X, Plus, Clock, Calendar, Target } from 'lucide-react'
+import { Play, Pause, RotateCcw, X, Plus, Clock, Calendar, Target } from "lucide-react"
 
 interface CircularTimerProps {
   duration: number // in minutes
@@ -29,6 +31,9 @@ interface CircularTimerProps {
     tags: string[]
   }) => void
   onOpenSessionModal?: () => void
+  currentSession?: {
+    status: "pending" | "running" | "completed" | "cancelled"
+  }
 }
 
 export function CircularTimer({
@@ -46,7 +51,8 @@ export function CircularTimer({
   sessionTags = [],
   sessionStartTime,
   onStartSession,
-  onOpenSessionModal
+  onOpenSessionModal,
+  currentSession,
 }: CircularTimerProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [dragAngle, setDragAngle] = useState(0)
@@ -54,6 +60,7 @@ export function CircularTimer({
   const [showSessionDetail, setShowSessionDetail] = useState(false)
   const [localDuration, setLocalDuration] = useState(25)
   const svgRef = useRef<SVGSVGElement>(null)
+  const [isEditingDuration, setIsEditingDuration] = useState(false)
 
   // Session form states
   const [subject, setSubject] = useState("")
@@ -65,8 +72,10 @@ export function CircularTimer({
   const center = 150
   const circumference = 2 * Math.PI * radius
 
-  // 세션이 없을 때만 설정 모드
-  const effectiveSettingMode = !sessionTitle
+  // 세션이 없거나 pending 상태에서 편집 중일 때만 설정 모드
+  const effectiveSettingMode =
+    !sessionTitle || (sessionTitle && currentSession?.status === "pending" && isEditingDuration)
+
   const effectiveDuration = effectiveSettingMode ? localDuration : duration
 
   // Calculate progress
@@ -87,7 +96,7 @@ export function CircularTimer({
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, '0')}`
+    return `${mins}:${secs.toString().padStart(2, "0")}`
   }
 
   // Get mouse/touch position relative to center
@@ -98,8 +107,8 @@ export function CircularTimer({
     const centerX = rect.left + rect.width / 2
     const centerY = rect.top + rect.height / 2
 
-    const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX
-    const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY
+    const clientX = "touches" in event ? event.touches[0].clientX : event.clientX
+    const clientY = "touches" in event ? event.touches[0].clientY : event.clientY
 
     const x = clientX - centerX
     const y = clientY - centerY
@@ -111,21 +120,24 @@ export function CircularTimer({
   }, [])
 
   // Handle drag start
-  const handleDragStart = useCallback((event: React.MouseEvent | React.TouchEvent) => {
-    if (!effectiveSettingMode) return
+  const handleDragStart = useCallback(
+    (event: React.MouseEvent | React.TouchEvent) => {
+      if (!effectiveSettingMode) return
 
-    event.preventDefault()
-    setIsDragging(true)
+      event.preventDefault()
+      setIsDragging(true)
 
-    const angle = Math.max(minAngle, getAngleFromEvent(event.nativeEvent as MouseEvent | TouchEvent))
-    setDragAngle(angle)
-    const newDuration = angleToMinutes(angle)
-    setLocalDuration(newDuration)
+      const angle = Math.max(minAngle, getAngleFromEvent(event.nativeEvent as MouseEvent | TouchEvent))
+      setDragAngle(angle)
+      const newDuration = angleToMinutes(angle)
+      setLocalDuration(newDuration)
 
-    if (onDurationChange) {
-      onDurationChange(newDuration)
-    }
-  }, [effectiveSettingMode, getAngleFromEvent, onDurationChange, minAngle])
+      if (onDurationChange) {
+        onDurationChange(newDuration)
+      }
+    },
+    [effectiveSettingMode, getAngleFromEvent, onDurationChange, minAngle],
+  )
 
   // Handle drag move
   useEffect(() => {
@@ -148,17 +160,17 @@ export function CircularTimer({
     }
 
     if (isDragging) {
-      document.addEventListener('mousemove', handleDragMove)
-      document.addEventListener('mouseup', handleDragEnd)
-      document.addEventListener('touchmove', handleDragMove)
-      document.addEventListener('touchend', handleDragEnd)
+      document.addEventListener("mousemove", handleDragMove)
+      document.addEventListener("mouseup", handleDragEnd)
+      document.addEventListener("touchmove", handleDragMove)
+      document.addEventListener("touchend", handleDragEnd)
     }
 
     return () => {
-      document.removeEventListener('mousemove', handleDragMove)
-      document.removeEventListener('mouseup', handleDragEnd)
-      document.removeEventListener('touchmove', handleDragMove)
-      document.removeEventListener('touchend', handleDragEnd)
+      document.removeEventListener("mousemove", handleDragMove)
+      document.removeEventListener("mouseup", handleDragEnd)
+      document.removeEventListener("touchmove", handleDragMove)
+      document.removeEventListener("touchend", handleDragEnd)
     }
   }, [isDragging, effectiveSettingMode, getAngleFromEvent, onDurationChange, minAngle])
 
@@ -213,7 +225,7 @@ export function CircularTimer({
           stroke="#9ca3af"
           strokeWidth={tickWidth}
           strokeLinecap="round"
-        />
+        />,
       )
     }
     return ticks
@@ -236,27 +248,23 @@ export function CircularTimer({
           textAnchor="middle"
           dominantBaseline="middle"
           className="text-sm font-bold fill-white/70"
-          style={{ fontSize: '12px' }}
+          style={{ fontSize: "12px" }}
         >
           {i}
-        </text>
+        </text>,
       )
     }
     return labels
   }
 
   const toggleTag = (tag: string) => {
-    setSelectedTags(prev =>
-      prev.includes(tag)
-        ? prev.filter(t => t !== tag)
-        : [...prev, tag]
-    )
+    setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]))
   }
 
   const addCustomTag = () => {
     if (newTag.trim() && !selectedTags.includes(newTag.trim())) {
-      const formattedTag = newTag.trim().startsWith('#') ? newTag.trim() : `#${newTag.trim()}`
-      setSelectedTags(prev => [...prev, formattedTag])
+      const formattedTag = newTag.trim().startsWith("#") ? newTag.trim() : `#${newTag.trim()}`
+      setSelectedTags((prev) => [...prev, formattedTag])
       setNewTag("")
     }
   }
@@ -267,9 +275,9 @@ export function CircularTimer({
     }
 
     // 입력 필드에 내용이 있으면 자동으로 태그에 추가
-    let finalTags = [...selectedTags]
+    const finalTags = [...selectedTags]
     if (newTag.trim()) {
-      const formattedTag = newTag.trim().startsWith('#') ? newTag.trim() : `#${newTag.trim()}`
+      const formattedTag = newTag.trim().startsWith("#") ? newTag.trim() : `#${newTag.trim()}`
       if (!finalTags.includes(formattedTag)) {
         finalTags.push(formattedTag)
       }
@@ -280,7 +288,7 @@ export function CircularTimer({
         subject,
         goal,
         duration: localDuration,
-        tags: finalTags
+        tags: finalTags,
       })
     }
 
@@ -307,7 +315,6 @@ export function CircularTimer({
       {/* Timer Container - 빨간색 테마 적용 */}
       <div className="relative mb-6">
         <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-3xl shadow-2xl p-6 relative mx-auto">
-
           {/* Session Title or New Session Button */}
           <div className="absolute top-4 left-4 z-10">
             {sessionTitle ? (
@@ -315,12 +322,8 @@ export function CircularTimer({
                 onClick={handleSessionTitleClick}
                 className="backdrop-blur-md bg-white/20 hover:bg-white/30 border border-white/20 rounded-xl px-3 py-2 shadow-md max-w-32 transition-all duration-200 hover:scale-105"
               >
-                <div className="text-sm font-bold text-white truncate">
-                  {sessionTitle}
-                </div>
-                <div className="text-xs text-white/70 mt-1">
-                  상세보기
-                </div>
+                <div className="text-sm font-bold text-white truncate">{sessionTitle}</div>
+                <div className="text-xs text-white/70 mt-1">상세보기</div>
               </button>
             ) : (
               <button
@@ -339,8 +342,48 @@ export function CircularTimer({
                 {effectiveSettingMode ? `${localDuration}분` : formatTime(timeLeft)}
               </div>
               <div className="text-xs text-white/70 text-center">
-                {effectiveSettingMode ? "설정" : (isBreak ? "휴식" : "집중")}
+                {effectiveSettingMode ? "설정" : isBreak ? "휴식" : "집중"}
               </div>
+              {/* 수정 버튼 - pending 상태에서만 표시 */}
+              {sessionTitle && currentSession?.status === "pending" && !isEditingDuration && (
+                <button
+                  onClick={() => {
+                    setIsEditingDuration(true)
+                    setLocalDuration(duration)
+                    setDragAngle((duration / 60) * 360)
+                  }}
+                  className="mt-2 w-full px-2 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs text-white transition-all"
+                >
+                  수정하기
+                </button>
+              )}
+              {/* 수정 완료/취소 버튼 */}
+              {isEditingDuration && (
+                <div className="mt-2 flex gap-1">
+                  <button
+                    onClick={() => {
+                      // 백엔드에 duration 업데이트 요청
+                      if (onDurationChange) {
+                        onDurationChange(localDuration)
+                      }
+                      setIsEditingDuration(false)
+                    }}
+                    className="flex-1 px-2 py-1 bg-green-500/30 hover:bg-green-500/40 rounded-lg text-xs text-white transition-all"
+                  >
+                    완료
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsEditingDuration(false)
+                      setLocalDuration(duration)
+                      setDragAngle((duration / 60) * 360)
+                    }}
+                    className="flex-1 px-2 py-1 bg-red-500/30 hover:bg-red-500/40 rounded-lg text-xs text-white transition-all"
+                  >
+                    취소
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -350,24 +393,32 @@ export function CircularTimer({
               ref={svgRef}
               width="300"
               height="300"
-              className={`${effectiveSettingMode ? 'cursor-pointer' : ''} touch-none`}
-              style={{ touchAction: 'none' }}
-              onMouseDownCapture={(e) => { e.preventDefault(); e.stopPropagation(); handleDragStart(e); }}
-              onTouchStartCapture={(e) => { e.preventDefault(); e.stopPropagation(); handleDragStart(e); }}
+              className={`${effectiveSettingMode ? "cursor-pointer" : ""} touch-none`}
+              style={{ touchAction: "none" }}
+              onMouseDownCapture={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleDragStart(e)
+              }}
+              onTouchStartCapture={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleDragStart(e)
+              }}
             >
               <defs>
                 <filter id="innerShadow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feGaussianBlur in="SourceGraphic" stdDeviation="3"/>
-                  <feOffset dx="2" dy="2" result="offset"/>
-                  <feFlood floodColor="#000000" floodOpacity="0.2"/>
-                  <feComposite in2="offset" operator="in"/>
+                  <feGaussianBlur in="SourceGraphic" stdDeviation="3" />
+                  <feOffset dx="2" dy="2" result="offset" />
+                  <feFlood floodColor="#000000" floodOpacity="0.2" />
+                  <feComposite in2="offset" operator="in" />
                   <feMerge>
-                    <feMergeNode/>
-                    <feMergeNode in="SourceGraphic"/>
+                    <feMergeNode />
+                    <feMergeNode in="SourceGraphic" />
                   </feMerge>
                 </filter>
                 <filter id="dropShadow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feDropShadow dx="2" dy="2" stdDeviation="3" floodOpacity="0.3"/>
+                  <feDropShadow dx="2" dy="2" stdDeviation="3" floodOpacity="0.3" />
                 </filter>
                 <linearGradient id="focusGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stopColor="#ef4444" stopOpacity="0.9" />
@@ -420,8 +471,8 @@ export function CircularTimer({
               {/* Drag handle (setting mode only) - 빨간색 */}
               {effectiveSettingMode && (
                 <circle
-                  cx={center + radius * Math.cos((dragAngle - 90) * Math.PI / 180)}
-                  cy={center + radius * Math.sin((dragAngle - 90) * Math.PI / 180)}
+                  cx={center + radius * Math.cos(((dragAngle - 90) * Math.PI) / 180)}
+                  cy={center + radius * Math.sin(((dragAngle - 90) * Math.PI) / 180)}
                   r="12"
                   fill={isBreak ? "#22c55e" : "#ef4444"}
                   stroke="rgba(255, 255, 255, 0.8)"
@@ -441,9 +492,7 @@ export function CircularTimer({
                     <div className="text-xs">5분 ~ 60분</div>
                   </div>
                 ) : (
-                  <div className="text-lg font-semibold text-white">
-                    {isRunning ? "진행 중" : "대기 중"}
-                  </div>
+                  <div className="text-lg font-semibold text-white">{isRunning ? "진행 중" : "대기 중"}</div>
                 )}
               </div>
             </div>
@@ -509,7 +558,9 @@ export function CircularTimer({
 
               {/* Subject Input */}
               <div className="mb-4">
-                <Label htmlFor="subject" className="text-base font-semibold text-white">주제</Label>
+                <Label htmlFor="subject" className="text-base font-semibold text-white">
+                  주제
+                </Label>
                 <Input
                   id="subject"
                   placeholder="예: JWT refresh token 로직 작성"
@@ -521,7 +572,9 @@ export function CircularTimer({
 
               {/* Goal Input */}
               <div className="mb-4">
-                <Label htmlFor="goal" className="text-base font-semibold text-white">목표</Label>
+                <Label htmlFor="goal" className="text-base font-semibold text-white">
+                  목표
+                </Label>
                 <Textarea
                   id="goal"
                   placeholder="예: /login 테스트까지 완료"
@@ -540,15 +593,20 @@ export function CircularTimer({
                     placeholder="새 태그 입력..."
                     value={newTag}
                     onChange={(e) => setNewTag(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && addCustomTag()}
+                    onKeyPress={(e) => e.key === "Enter" && addCustomTag()}
                     className="flex-1 bg-white/10 border-white/20 text-white placeholder-white/60"
                   />
-                  <Button onClick={addCustomTag} variant="outline" size="sm" className="border-white/20 bg-white/10 text-white hover:bg-white/20">
+                  <Button
+                    onClick={addCustomTag}
+                    variant="outline"
+                    size="sm"
+                    className="border-white/20 bg-white/10 text-white hover:bg-white/20"
+                  >
                     추가
                   </Button>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {selectedTags.map(tag => (
+                  {selectedTags.map((tag) => (
                     <Badge
                       key={tag}
                       variant="secondary"
@@ -637,12 +695,12 @@ export function CircularTimer({
                     <div>
                       <div className="text-sm font-semibold text-white/70 mb-1">시작 시간</div>
                       <div className="text-white">
-                        {new Date(sessionStartTime).toLocaleString('ko-KR', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
+                        {new Date(sessionStartTime).toLocaleString("ko-KR", {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
                         })}
                       </div>
                     </div>
@@ -654,7 +712,7 @@ export function CircularTimer({
                   <div>
                     <div className="text-sm font-semibold text-white/70 mb-2">태그</div>
                     <div className="flex flex-wrap gap-2">
-                      {sessionTags.map(tag => (
+                      {sessionTags.map((tag) => (
                         <Badge key={tag} variant="secondary" className="text-xs bg-white/20 text-white">
                           {tag}
                         </Badge>
@@ -670,9 +728,7 @@ export function CircularTimer({
                     <span className="text-white">
                       {isBreak ? "휴식 중" : "집중 중"} • {isRunning ? "진행 중" : "일시정지"}
                     </span>
-                    <span className="text-2xl font-mono font-bold text-white">
-                      {formatTime(timeLeft)}
-                    </span>
+                    <span className="text-2xl font-mono font-bold text-white">{formatTime(timeLeft)}</span>
                   </div>
                 </div>
               </div>

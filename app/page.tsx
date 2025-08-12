@@ -56,8 +56,7 @@ interface PomodoroSession {
   started_at?: Date
   created_at: Date
   updated_at: Date
-  status: 'pending' | 'started' | 'paused' | 'completed' | 'cancelled'
-  completed: boolean
+  status: 'pending' | 'started' | 'paused' | 'completed' | 'cancelled' | 'reviewed'
   reflection?: string
 }
 
@@ -317,6 +316,7 @@ const SessionCard: React.FC<SessionCardProps> = ({
         case 'started': return 'bg-blue-400'
         case 'paused': return 'bg-yellow-400'
         case 'cancelled': return 'bg-red-400'
+        case 'reviewed': return 'bg-purple-400'
         default: return 'bg-gray-400'
       }
     }
@@ -328,6 +328,7 @@ const SessionCard: React.FC<SessionCardProps> = ({
         case 'paused': return '일시정지'
         case 'cancelled': return '취소됨'
         case 'pending': return '대기중'
+        case 'reviewed': return '회고완료'
         default: return status
       }
     }
@@ -387,7 +388,7 @@ const SessionCard: React.FC<SessionCardProps> = ({
                 )}
 
                 {/* Reflection input for completed sessions without reflection */}
-                {session.completed && !session.reflection && (
+                {session.status === 'completed' && !session.reflection && (
                   <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
                     <div className="flex items-center gap-2 mb-2">
                       <CheckCircle className="w-4 h-4 text-green-400" />
@@ -540,6 +541,7 @@ function MemoSessionApp() {
   const [timeLeft, setTimeLeft] = useState(0)
   const [isRunning, setIsRunning] = useState(false)
   const [sessions, setSessions] = useState<PomodoroSession[]>([])
+  const [breakStartedAt, setBreakStartedAt] = useState<Date | null>(null);
 
   // Session reflection states
   const [sessionReflections, setSessionReflections] = useState<{ [sessionId: string]: string }>({})
@@ -637,7 +639,6 @@ function MemoSessionApp() {
         break_duration: session.break_duration,
         tags: session.tags,
         status: session.status,
-        completed: session.completed,
         created_at: session.created_at,
         // user_id is handled by the backend based on the session/cookie
       };
@@ -670,10 +671,7 @@ function MemoSessionApp() {
         updated_at: new Date().toISOString(),
       }
 
-      // If marking as completed, also set completed flag
-      if (status === 'completed') {
-        updateData.completed = true
-      }
+      
 
       const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/session/${sessionId}/status`, {
         method: "PUT",
@@ -718,6 +716,7 @@ function MemoSessionApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reflection: reflection,
+          status: 'reviewed',
           updated_at: new Date().toISOString(),
         }),
       })
@@ -755,45 +754,54 @@ function MemoSessionApp() {
 
   // Timer logic for current session
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null
+    let interval: NodeJS.Timeout | null = null;
 
-    if (isRunning && timeLeft > 0 && currentSession) {
+    if (isRunning) {
       interval = setInterval(() => {
-        setTimeLeft(prev => prev - 1)
-      }, 1000)
-    } else if (timeLeft === 0 && isRunning && currentSession) {
-      setIsRunning(false)
-      if (currentPhase === "focus") {
-        // Focus time completed, mark session as completed and start break
-        const completedSession = {
-          ...currentSession,
-          status: 'completed' as const,
-          completed: true,
-          updated_at: new Date()
+        if (currentPhase === 'focus' && currentSession?.status === 'started' && currentSession.started_at) {
+          const now = Date.now();
+          const started = new Date(currentSession.started_at).getTime();
+          const elapsed = Math.floor((now - started) / 1000);
+          const newTimeLeft = Math.max(0, currentSession.duration * 60 - elapsed);
+          setTimeLeft(newTimeLeft);
+        } else if (currentPhase === 'break' && currentSession && breakStartedAt) {
+          const now = Date.now();
+          const started = breakStartedAt.getTime();
+          const elapsed = Math.floor((now - started) / 1000);
+          const newTimeLeft = Math.max(0, currentSession.break_duration * 60 - elapsed);
+          setTimeLeft(newTimeLeft);
         }
-        setCurrentSession(completedSession)
-
-        // Update session status in backend
-        updateSessionStatus(currentSession.id, 'completed')
-
-        // Refresh sessions to get updated data
-        fetchSessionData()
-
-        setCurrentPhase("break")
-        setTimeLeft(currentSession.break_duration * 60)
-        setIsRunning(true)
-      } else if (currentPhase === "break") {
-        // Break completed, reset to setup
-        setCurrentPhase("setup")
-        setCurrentSession(null)
-        setTimeLeft(0)
-      }
+      }, 1000);
     }
 
     return () => {
-      if (interval) clearInterval(interval)
+      if (interval) clearInterval(interval);
+    };
+  }, [isRunning, currentSession, currentPhase, breakStartedAt]);
+
+  useEffect(() => {
+    if (timeLeft < 1 && isRunning && currentSession) {
+      setIsRunning(false);
+      if (currentPhase === "focus") {
+        const completedSession = {
+          ...currentSession,
+          status: 'completed' as const,
+          updated_at: new Date()
+        };
+        setCurrentSession(completedSession);
+        updateSessionStatus(currentSession.id, 'completed');
+        fetchSessionData();
+        setCurrentPhase("break");
+        setTimeLeft(currentSession.break_duration * 60);
+        setBreakStartedAt(new Date());
+        setIsRunning(true);
+      } else if (currentPhase === "break") {
+        setCurrentPhase("setup");
+        setCurrentSession(null);
+        setTimeLeft(0);
+      }
     }
-  }, [isRunning, timeLeft, currentPhase, currentSession])
+  }, [timeLeft, isRunning, currentSession, currentPhase]);
 
   useEffect(() => {
     let ticking = false
@@ -982,7 +990,7 @@ function MemoSessionApp() {
             groupedData[localSessionDate] = { session_count: 0, total_focus_time: 0 }
           }
           groupedData[localSessionDate].session_count++
-          if (session.completed) {
+          if (session.status === 'completed') {
             groupedData[localSessionDate].total_focus_time += session.duration
           }
         })
@@ -1254,8 +1262,7 @@ function MemoSessionApp() {
       tags: sessionData.tags,
       created_at: new Date(),
       updated_at: new Date(),
-      status: 'pending',
-      completed: false
+      status: 'pending'
     }
 
     const createdSession = await createSessionInBackend(newSession);
@@ -1274,35 +1281,31 @@ function MemoSessionApp() {
   }
 
   const toggleTimer = async () => {
-    if (!currentSession) return
+    if (!currentSession) return;
 
-    const newRunningState = !isRunning
-    setIsRunning(newRunningState)
+    const newRunningState = !isRunning;
 
-    if (newRunningState) {
-      // Starting timer
-      const newStatus = currentSession.status === 'pending' ? 'started' : 'started'
-      await updateSessionStatus(currentSession.id, newStatus)
+    if (newRunningState) { // Start or Resume
+      const now = new Date();
+      const updatedSession = { ...currentSession, status: 'started' as const, updated_at: now };
 
-      // Update started_at if this is the first start
-      if (currentSession.status === 'pending') {
-        setCurrentSession(prev => prev ? {
-          ...prev,
-          status: 'started',
-          started_at: new Date(),
-          updated_at: new Date()
-        } : null)
+      if (currentSession.status === 'paused' && currentSession.updated_at && currentSession.started_at) {
+        const pauseDuration = now.getTime() - new Date(currentSession.updated_at).getTime();
+        updatedSession.started_at = new Date(new Date(currentSession.started_at).getTime() + pauseDuration);
+      } else if (currentSession.status === 'pending') {
+        updatedSession.started_at = now;
       }
-    } else {
-      // Pausing timer
-      await updateSessionStatus(currentSession.id, 'paused')
-      setCurrentSession(prev => prev ? {
-        ...prev,
-        status: 'paused',
-        updated_at: new Date()
-      } : null)
+
+      await updateSessionStatus(currentSession.id, 'started');
+      setCurrentSession(updatedSession);
+
+    } else { // Pause
+      await updateSessionStatus(currentSession.id, 'paused');
+      setCurrentSession(prev => prev ? { ...prev, status: 'paused' as const, updated_at: new Date() } : null);
     }
-  }
+
+    setIsRunning(newRunningState);
+  };
 
   const resetTimer = async () => {
     if (currentSession) {
@@ -1325,8 +1328,8 @@ function MemoSessionApp() {
 
   const cancelCurrentTask = async () => {
     if (currentSession) {
-      // Update session status to cancelled
-      await updateSessionStatus(currentSession.id, 'cancelled')
+      // delete session
+      await deleteSessionFromBackend(currentSession.id)
     }
 
     setIsRunning(false)
@@ -1588,7 +1591,7 @@ function MemoSessionApp() {
     const todaySessions = sessions.filter(session =>
       formatLocalDate(new Date(session.created_at)) === today
     )
-    const completedSessions = todaySessions.filter(s => s.completed)
+    const completedSessions = todaySessions.filter(s => s.status === 'completed')
 
     return {
       totalFocusTime: completedSessions.reduce((acc, session) => acc + session.duration, 0),
@@ -1608,7 +1611,7 @@ function MemoSessionApp() {
       const sessionDate = new Date(session.created_at)
       return sessionDate >= startOfWeek && sessionDate <= endOfWeek
     })
-    const completedSessions = weekSessions.filter(s => s.completed)
+    const completedSessions = weekSessions.filter(s => s.status === 'completed')
 
     return {
       totalFocusTime: completedSessions.reduce((acc, session) => acc + session.duration, 0),
@@ -1628,7 +1631,7 @@ function MemoSessionApp() {
       const sessionDate = new Date(session.created_at)
       return sessionDate >= firstDay && sessionDate <= lastDay
     })
-    const completedSessions = monthSessions.filter(s => s.completed)
+    const completedSessions = monthSessions.filter(s => s.status === 'completed')
 
     return {
       totalFocusTime: completedSessions.reduce((acc, session) => acc + session.duration, 0),

@@ -25,6 +25,7 @@ interface CircularTimerProps {
   sessionTags?: string[]
   sessionStartTime?: Date
   onUpdateSession?: (updates: any) => void
+  onSetTimeLeft?: (seconds: number) => void
   onOpenSessionModal?: () => void
 }
 
@@ -43,6 +44,7 @@ export function CircularTimer({
   sessionTags = [],
   sessionStartTime,
   onUpdateSession,
+  onSetTimeLeft,
   onOpenSessionModal,
 }: CircularTimerProps) {
   const [isDragging, setIsDragging] = useState(false)
@@ -119,8 +121,13 @@ export function CircularTimer({
       setDragAngle(angle)
       const newDuration = angleToMinutes(angle)
       setLocalDuration(newDuration)
+
+      // Update parent's timeLeft immediately for visual feedback
+      if (onSetTimeLeft) {
+        onSetTimeLeft(newDuration * 60)
+      }
     },
-    [sessionTitle, isRunning, getAngleFromEvent, minAngle],
+    [sessionTitle, isRunning, getAngleFromEvent, minAngle, onSetTimeLeft],
   )
 
   // Handle drag move
@@ -133,13 +140,15 @@ export function CircularTimer({
       setDragAngle(angle)
       const newDuration = angleToMinutes(angle)
       setLocalDuration(newDuration)
+
+      // Update parent's timeLeft immediately for visual feedback
+      if (onSetTimeLeft) {
+        onSetTimeLeft(newDuration * 60)
+      }
     }
 
     const handleDragEnd = () => {
-      if (isDragging && sessionTitle && !isRunning && onUpdateSession) {
-        // Update session duration in backend
-        onUpdateSession({ duration: localDuration })
-      }
+      // Don't update backend here - only when start button is pressed
       setIsDragging(false)
     }
 
@@ -156,7 +165,7 @@ export function CircularTimer({
       document.removeEventListener("touchmove", handleDragMove)
       document.removeEventListener("touchend", handleDragEnd)
     }
-  }, [isDragging, sessionTitle, isRunning, getAngleFromEvent, minAngle, localDuration, onUpdateSession])
+  }, [isDragging, sessionTitle, isRunning, getAngleFromEvent, minAngle, onSetTimeLeft])
 
   // Initialize drag angle when component mounts or duration changes
   useEffect(() => {

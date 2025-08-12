@@ -1313,6 +1313,27 @@ function MemoSessionApp() {
     }
   }
 
+  // Handle timer button click - check for current session or create new one
+  const handleTimerButtonClick = async () => {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/session/current`
+      const res = await apiCall(url)
+
+      if (res && res.ok) {
+        // Current session exists, show timer
+        const data = await res.json()
+        setCurrentSession(parseSession(data))
+        setShowSessionTimer(true)
+      } else {
+        // No current session, show creation modal
+        setShowNewSessionModal(true)
+      }
+    } catch (err) {
+      // No current session, show creation modal
+      setShowNewSessionModal(true)
+    }
+  }
+
   // New session creation function
   const handleCreateNewSession = async (sessionData: { subject: string; goal: string; tags: string[] }) => {
     const createdSession = await createSessionInBackend(sessionData)
@@ -1328,6 +1349,7 @@ function MemoSessionApp() {
       setCurrentPhase("focus")
       setIsRunning(false)
       setShowNewSessionModal(false)
+      setShowSessionTimer(true) // Show timer after creation
     }
   }
 
@@ -1355,6 +1377,31 @@ function MemoSessionApp() {
     if (newRunningState) {
       // Start or Resume
       const now = new Date()
+
+      // First, update duration if it has changed (from drag)
+      const currentDurationFromTimer = Math.round(timeLeft / 60) // Get current duration from timer
+      if (currentDurationFromTimer !== currentSession.duration && currentSession.status === "pending") {
+        const success = await updateSessionInBackend(currentSession.id, {
+          duration: currentDurationFromTimer,
+          break_duration: getBreakDuration(currentDurationFromTimer),
+        })
+        if (!success) {
+          console.error("Failed to update session duration")
+          return
+        }
+        // Update local session state
+        setCurrentSession((prev) =>
+          prev
+            ? {
+                ...prev,
+                duration: currentDurationFromTimer,
+                break_duration: getBreakDuration(currentDurationFromTimer),
+              }
+            : null,
+        )
+      }
+
+      // Then update status to started
       const updatedSession = { ...currentSession, status: "started" as const, updated_at: now }
 
       if (currentSession.status === "paused" && currentSession.updated_at && currentSession.started_at) {
@@ -2454,7 +2501,7 @@ function MemoSessionApp() {
                   </button>
 
                   <button
-                    onClick={() => setShowSessionTimer((prev) => !prev)}
+                    onClick={handleTimerButtonClick}
                     className="ml-2 p-2 rounded-full bg-white/10 hover:bg-white/20 transition"
                   >
                     <Timer className="w-5 h-5 text-purple-400" />
@@ -2648,7 +2695,7 @@ function MemoSessionApp() {
                       sessionGoal={currentSession?.goal}
                       sessionTags={currentSession?.tags}
                       sessionStartTime={currentSession?.started_at}
-                      onUpdateSession={handleUpdateSession}
+                      onSetTimeLeft={setTimeLeft}
                     />
                   </div>
                 </div>

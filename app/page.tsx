@@ -980,8 +980,9 @@ function MemoSessionApp() {
                               type="text"
                               value={sessionSetup.subject}
                               onChange={(e) => setSessionSetup({ ...sessionSetup, subject: e.target.value })}
-                              className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60"
+                              className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent"
                               placeholder="무엇에 집중하시겠습니까?"
+                              autoFocus
                             />
                           </div>
 
@@ -990,7 +991,7 @@ function MemoSessionApp() {
                             <textarea
                               value={sessionSetup.goal}
                               onChange={(e) => setSessionSetup({ ...sessionSetup, goal: e.target.value })}
-                              className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 resize-none"
+                              className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 resize-none focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent"
                               rows={3}
                               placeholder="이 세션에서 달성하고 싶은 목표를 입력하세요"
                             />
@@ -1002,7 +1003,7 @@ function MemoSessionApp() {
                               type="text"
                               value={sessionSetup.tags}
                               onChange={(e) => setSessionSetup({ ...sessionSetup, tags: e.target.value })}
-                              className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60"
+                              className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent"
                               placeholder="태그를 입력하세요 (쉼표로 구분)"
                             />
                           </div>
@@ -1015,7 +1016,7 @@ function MemoSessionApp() {
                               onChange={(e) =>
                                 setSessionSetup({ ...sessionSetup, duration: Number.parseInt(e.target.value) || 25 })
                               }
-                              className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60"
+                              className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent"
                               min="1"
                               max="120"
                             />

@@ -955,8 +955,14 @@ function MemoSessionApp() {
 
                   {/* Session Setup Modal */}
                   {showSessionSetup && (
-                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                      <div className="bg-gradient-to-br from-slate-800 to-purple-900 rounded-2xl p-6 max-w-md w-full">
+                    <div
+                      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-center justify-center p-4"
+                      onClick={() => setShowSessionSetup(false)}
+                    >
+                      <div
+                        className="bg-gradient-to-br from-slate-800 to-purple-900 rounded-2xl p-6 max-w-md w-full relative"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <div className="flex items-center justify-between mb-6">
                           <h2 className="text-xl font-bold text-white">새 세션 설정</h2>
                           <Button

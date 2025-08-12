@@ -813,112 +813,70 @@ function MemoSessionApp() {
             <>
               {appMode === "memo" ? (
                 <>
-                  {/* {renderDailySummary()} */}
-                  {/* <MemoInput
-                    showInput={showInput}
-                    inputText={inputText}
-                    inputTags={inputTags}
-                    currentTag={currentTag}
-                    inputAttachments={inputAttachments}
-                    isRecording={isRecording}
-                    showImageOptions={showImageOptions}
-                    categories={categories}
-                    selectedCategory={selectedCategory}
-                    showCategorySelector={showCategorySelector}
-                    newCategoryName={newCategoryName}
-                    showNewCategoryInput={showNewCategoryInput}
-                    handleSubmit={handleSubmit}
-                    resetInputState={resetInputState}
-                    setInputText={setInputText}
-                    setInputTags={setInputTags}
-                    setCurrentTag={setCurrentTag}
-                    startRecording={startRecording}
-                    stopRecording={stopRecording}
-                    fileInputRef={fileInputRef}
-                    cameraInputRef={cameraInputRef}
-                    setShowImageOptions={setShowImageOptions}
-                    addImages={addImages}
-                    removeInputImage={removeInputImage}
-                    removeInputAudio={removeInputAudio}
-                    setCategories={setCategories}
-                    setSelectedCategory={setSelectedCategory}
-                    setShowCategorySelector={setShowCategorySelector}
-                    setNewCategoryName={setNewCategoryName}
-                    setShowNewCategoryInput={setShowNewCategoryInput}
-                    addTag={addTag}
-                    removeTag={removeTag}
-                    createNewCategory={createNewCategory}
-                  /> */}
-
-                  {/* <MemoDetail
-                    selectedMemo={selectedMemo}
-                    isEditing={isEditing}
-                    editText={editText}
-                    editTags={editTags}
-                    editCurrentTag={editCurrentTag}
-                    editAttachments={editAttachments}
-                    categories={categories}
-                    editSelectedCategory={editSelectedCategory}
-                    showEditCategorySelector={showEditCategorySelector}
-                    showEditNewCategoryInput={showEditNewCategoryInput}
-                    resetDetailState={resetDetailState}
-                    setIsEditing={setIsEditing}
-                    setEditText={setEditText}
-                    setEditTags={setEditTags}
-                    setEditCurrentTag={setEditCurrentTag}
-                    setEditAttachments={setEditAttachments}
-                    setEditSelectedCategory={setEditSelectedCategory}
-                    setShowEditCategorySelector={setShowEditCategorySelector}
-                    setShowEditNewCategoryInput={setShowEditNewCategoryInput}
-                    editFileInputRef={editFileInputRef}
-                    handleEdit={handleEdit}
-                    handleDelete={handleDelete}
-                    removeExistingAttachment={removeExistingAttachment}
-                    addEditImages={addEditImages}
-                    addEditTag={addEditTag}
-                    removeEditTag={removeEditTag}
-                    createNewCategory={createNewCategory}
-                    playAudio={playAudio}
-                    audioRefs={audioRefs}
-                    playingAudio={playingAudio}
-                    imageModal={imageModal}
-                    setImageModal={setImageModal}
-                  /> */}
-
-                  {/* <div className="space-y-4">
-                    {filteredMemos.length > 0 ? (
-                      filteredMemos.map((memo) => renderMemoCard(memo))
+                  <div className="space-y-4">
+                    {memoHook.filteredMemos.length > 0 ? (
+                      memoHook.filteredMemos.map((memo) => (
+                        <div key={memo.id} className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-blue-400"></div>
+                              <span className="text-white/80 text-sm">
+                                {new Date(memo.created_at).toLocaleTimeString(locale, {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                            </div>
+                          </div>
+                          <p className="text-white text-base leading-relaxed mb-3">{memo.content}</p>
+                          {memo.tags && memo.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {memo.tags.map((tag, index) => (
+                                <span key={index} className="px-2 py-1 bg-white/20 text-white/80 text-xs rounded-full">
+                                  #{tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))
                     ) : (
                       <div className="text-center py-8">
                         <p className="text-white/70 text-lg mb-2">메모가 없습니다</p>
                         <p className="text-white/50 text-sm">새로운 메모를 작성해서 하루를 기록해보세요</p>
                       </div>
                     )}
-                  </div> */}
+                  </div>
                 </>
               ) : (
                 <>
-                  {/* {renderSessionDailySummary()} */}
                   <div className="space-y-4">
-                    {/* {sessions.length > 0 ? (
-                      sessions.map((session) => (
-                        <SessionCard
-                          key={session.id}
-                          session={session}
-                          locale={locale}
-                          timeZone={timeZone}
-                          sessionReflections={sessionReflections}
-                          setSessionReflections={setSessionReflections}
-                          handleReflectionSubmit={handleReflectionSubmit}
-                          deleteSessionFromBackend={deleteSessionFromBackend}
-                        />
+                    {sessionHook.sessions.length > 0 ? (
+                      sessionHook.sessions.map((session) => (
+                        <div key={session.id} className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-white/80 text-sm">
+                              {new Date(session.created_at).toLocaleTimeString(locale, {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                            <span className="text-white/60 text-xs">{session.focus_duration}분</span>
+                          </div>
+                          <p className="text-white">{session.task_description}</p>
+                          {session.reflection && (
+                            <div className="mt-3 p-3 bg-white/5 rounded-lg">
+                              <p className="text-white/80 text-sm">{session.reflection}</p>
+                            </div>
+                          )}
+                        </div>
                       ))
                     ) : (
                       <div className="text-center py-8">
                         <p className="text-white/70 text-lg mb-2">세션이 없습니다</p>
                         <p className="text-white/50 text-sm">새로운 포모도로 세션을 시작해보세요</p>
                       </div>
-                    )} */}
+                    )}
                   </div>
                 </>
               )}
@@ -926,10 +884,97 @@ function MemoSessionApp() {
           )}
 
           {/* Weekly View */}
-          {/* {viewMode === "weekly" && renderWeeklyView()} */}
+          {viewMode === "weekly" && (
+            <div className="space-y-4">
+              {appMode === "memo" ? (
+                <div className="grid gap-4">
+                  {Object.entries(memoHook.weeklyData).map(([date, dayMemos]) => (
+                    <div key={date} className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+                      <h3 className="text-white font-medium mb-3">
+                        {new Date(date).toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" })}
+                      </h3>
+                      <div className="space-y-2">
+                        {dayMemos.map((memo) => (
+                          <div key={memo.id} className="bg-white/5 rounded-lg p-3">
+                            <p className="text-white/90 text-sm">{memo.content}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {Object.entries(sessionHook.weeklySessionData).map(([date, daySessions]) => (
+                    <div key={date} className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+                      <h3 className="text-white font-medium mb-3">
+                        {new Date(date).toLocaleDateString(locale, { weekday: "long", month: "short", day: "numeric" })}
+                      </h3>
+                      <div className="space-y-2">
+                        {daySessions.map((session) => (
+                          <div key={session.id} className="bg-white/5 rounded-lg p-3">
+                            <p className="text-white/90 text-sm">{session.task_description}</p>
+                            <span className="text-white/60 text-xs">{session.focus_duration}분</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Monthly View */}
-          {/* {viewMode === "monthly" && renderMonthlyView()} */}
+          {viewMode === "monthly" && (
+            <div className="grid grid-cols-7 gap-2">
+              {appMode === "memo" ? (
+                <>
+                  {Array.from({ length: 35 }, (_, i) => {
+                    const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), i - 6)
+                    const dateStr = date.toISOString().split("T")[0]
+                    const dayData = memoHook.monthlyData[dateStr]
+
+                    return (
+                      <div
+                        key={i}
+                        className={`aspect-square p-2 rounded-lg text-center ${
+                          date.getMonth() === currentDate.getMonth()
+                            ? "bg-white/10 text-white"
+                            : "bg-white/5 text-white/50"
+                        }`}
+                      >
+                        <div className="text-xs mb-1">{date.getDate()}</div>
+                        {dayData && <div className="w-2 h-2 bg-blue-400 rounded-full mx-auto"></div>}
+                      </div>
+                    )
+                  })}
+                </>
+              ) : (
+                <>
+                  {Array.from({ length: 35 }, (_, i) => {
+                    const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), i - 6)
+                    const dateStr = date.toISOString().split("T")[0]
+                    const dayData = sessionHook.monthlySessionData[dateStr]
+
+                    return (
+                      <div
+                        key={i}
+                        className={`aspect-square p-2 rounded-lg text-center ${
+                          date.getMonth() === currentDate.getMonth()
+                            ? "bg-white/10 text-white"
+                            : "bg-white/5 text-white/50"
+                        }`}
+                      >
+                        <div className="text-xs mb-1">{date.getDate()}</div>
+                        {dayData && <div className="w-2 h-2 bg-green-400 rounded-full mx-auto"></div>}
+                      </div>
+                    )
+                  })}
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Category Management Modal */}

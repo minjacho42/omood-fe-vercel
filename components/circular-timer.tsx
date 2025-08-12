@@ -312,74 +312,57 @@ export function CircularTimer({
       <div className="relative mb-6">
         <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-3xl shadow-2xl p-6 relative mx-auto">
           {/* Session Title or New Session Button */}
-          <div className="absolute top-4 left-4 z-10">
-            {sessionTitle ? (
-              <button
-                onClick={handleSessionTitleClick}
-                className="backdrop-blur-md bg-white/20 hover:bg-white/30 border border-white/20 rounded-xl px-3 py-2 shadow-md max-w-32 transition-all duration-200 hover:scale-105"
-              >
-                <div className="text-sm font-bold text-white truncate">{sessionTitle}</div>
-                <div className="text-xs text-white/70 mt-1">상세보기</div>
-              </button>
-            ) : (
-              <button
-                onClick={handleNewSessionClick}
-                className="backdrop-blur-md bg-white/20 hover:bg-white/30 border border-white/20 rounded-xl p-3 shadow-md transition-all duration-200 hover:scale-105"
-              >
-                <Plus className="w-5 h-5 text-white" />
-              </button>
-            )}
-          </div>
 
           {/* Digital Time Display */}
-          <div className="absolute top-4 right-4 z-10">
-            <div className="backdrop-blur-md bg-black/30 border border-white/20 rounded-xl px-4 py-2 shadow-lg">
-              <div className="text-xl font-mono font-bold text-white text-center">
-                {effectiveSettingMode ? `${localDuration}분` : formatTime(timeLeft)}
-              </div>
-              <div className="text-xs text-white/70 text-center">
-                {effectiveSettingMode ? "설정" : isBreak ? "휴식" : "집중"}
-              </div>
-              {/* 수정 버튼 - pending 상태에서만 표시 */}
-              {sessionTitle && currentSession?.status === "pending" && !isEditingDuration && (
-                <button
-                  onClick={() => {
-                    setIsEditingDuration(true)
-                    setLocalDuration(duration)
-                    setDragAngle((duration / 60) * 360)
-                  }}
-                  className="mt-2 w-full px-2 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs text-white transition-all"
-                >
-                  수정하기
-                </button>
-              )}
-              {/* 수정 완료/취소 버튼 */}
-              {isEditingDuration && (
-                <div className="mt-2 flex gap-1">
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10">
+            <div className="backdrop-blur-md bg-black/30 border border-white/20 rounded-xl px-6 py-3 shadow-lg min-w-[200px]">
+              <div className="text-center">
+                {sessionTitle && <div className="text-sm font-bold text-white mb-1 truncate">{sessionTitle}</div>}
+                <div className="text-2xl font-mono font-bold text-white">
+                  {effectiveSettingMode ? `${localDuration}분` : formatTime(timeLeft)}
+                </div>
+                <div className="text-xs text-white/70">{effectiveSettingMode ? "설정" : isBreak ? "휴식" : "집중"}</div>
+                {/* 수정 버튼 - pending 상태에서만 표시 */}
+                {sessionTitle && currentSession?.status === "pending" && !isEditingDuration && (
                   <button
                     onClick={() => {
-                      // Only call onDurationChange when completing the edit
-                      if (onDurationChange) {
-                        onDurationChange(localDuration)
-                      }
-                      setIsEditingDuration(false)
-                    }}
-                    className="flex-1 px-2 py-1 bg-green-500/30 hover:bg-green-500/40 rounded-lg text-xs text-white transition-all"
-                  >
-                    완료
-                  </button>
-                  <button
-                    onClick={() => {
-                      setIsEditingDuration(false)
+                      setIsEditingDuration(true)
                       setLocalDuration(duration)
                       setDragAngle((duration / 60) * 360)
                     }}
-                    className="flex-1 px-2 py-1 bg-red-500/30 hover:bg-red-500/40 rounded-lg text-xs text-white transition-all"
+                    className="mt-2 w-full px-2 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs text-white transition-all"
                   >
-                    취소
+                    수정하기
                   </button>
-                </div>
-              )}
+                )}
+                {/* 수정 완료/취소 버튼 */}
+                {isEditingDuration && (
+                  <div className="mt-2 flex gap-1">
+                    <button
+                      onClick={() => {
+                        // Only call onDurationChange when completing the edit
+                        if (onDurationChange) {
+                          onDurationChange(localDuration)
+                        }
+                        setIsEditingDuration(false)
+                      }}
+                      className="flex-1 px-2 py-1 bg-green-500/30 hover:bg-green-500/40 rounded-lg text-xs text-white transition-all"
+                    >
+                      완료
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsEditingDuration(false)
+                        setLocalDuration(duration)
+                        setDragAngle((duration / 60) * 360)
+                      }}
+                      className="flex-1 px-2 py-1 bg-red-500/30 hover:bg-red-500/40 rounded-lg text-xs text-white transition-all"
+                    >
+                      취소
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -501,7 +484,9 @@ export function CircularTimer({
               onClick={sessionTitle ? onToggle : handleNewSessionClick}
               className="w-14 h-14 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 rounded-full shadow-lg flex items-center justify-center transition-all duration-200 active:scale-95"
             >
-              {sessionTitle && isRunning ? (
+              {!sessionTitle ? (
+                <Plus className="w-6 h-6 text-white" />
+              ) : sessionTitle && isRunning ? (
                 <Pause className="w-6 h-6 text-white" />
               ) : (
                 <Play className="w-6 h-6 text-white ml-1" />

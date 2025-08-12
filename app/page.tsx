@@ -288,6 +288,25 @@ interface SessionCardProps {
   deleteSessionFromBackend: (sessionId: string) => Promise<void>
 }
 
+interface CircularTimerProps {
+  duration: number
+  timeLeft: number
+  isRunning: boolean
+  isBreak: boolean
+  onToggle: () => void
+  onReset: () => void
+  onCancel?: () => void
+  sessionTitle?: string
+  sessionGoal?: string
+  sessionTags?: string[]
+  sessionStartTime?: Date
+  onStartSession: (sessionData: { subject: string; goal: string; duration: number; tags: string[] }) => Promise<void>
+  onDurationChange?: (newDuration: number) => void
+  currentSession?: {
+    status: "pending" | "started" | "paused" | "completed" | "cancelled"
+  }
+}
+
 const SessionCard: React.FC<SessionCardProps> = ({
   session,
   locale,
@@ -2429,7 +2448,7 @@ function MemoSessionApp() {
                       if (!next) setSearchQuery("")
                     }}
                     className={`rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-all ${
-                      isScrolled ? "w-8 h-8" : "w-10 h-10"
+                      isScrolled ? "w-8 h-8" : "w-10 h-"
                     }`}
                   >
                     <Search className={`${isScrolled ? "w-4 h-4" : "w-5 h-5"}`} />
@@ -2621,7 +2640,7 @@ function MemoSessionApp() {
               >
                 <div
                   ref={timerRef}
-                  className="relative bg-black/100 p-4 rounded-xl shadow-lg cursor-grab pointer-events-auto"
+                  className="relative bg-black/90 backdrop-blur-md border border-white/20 p-4 rounded-xl shadow-lg cursor-grab pointer-events-auto"
                   style={{ touchAction: "none" }}
                   onMouseDown={(e) => e.stopPropagation()}
                   onTouchStart={(e) => {
@@ -2629,7 +2648,7 @@ function MemoSessionApp() {
                   }}
                 >
                   {/* Drag handle */}
-                  <div className="drag-handle mx-auto mb-2 w-12 h-1 bg-gray-300 rounded cursor-move" />
+                  <div className="drag-handle mx-auto mb-2 w-12 h-1 bg-white/50 rounded cursor-move" />
 
                   {/* Timer content */}
                   <div className="circular-timer">
@@ -2647,10 +2666,11 @@ function MemoSessionApp() {
                       sessionStartTime={currentSession?.started_at}
                       onStartSession={startSession}
                       onDurationChange={
-                        currentSession
+                        currentSession && currentSession.status === "pending"
                           ? (newDuration: number) => updateSessionDuration(currentSession.id, newDuration)
                           : undefined
                       }
+                      currentSession={currentSession}
                     />
                   </div>
                 </div>

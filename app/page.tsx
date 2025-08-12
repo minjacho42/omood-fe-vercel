@@ -16,15 +16,6 @@ import { motion, useAnimation } from "framer-motion"
 import { useDrag } from "@use-gesture/react"
 import Draggable from "react-draggable"
 
-// UUID 생성 함수
-// const generateUUID = (): string => {
-//   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-//     const r = Math.random() * 16 | 0
-//     const v = c == 'x' ? r : (r & 0x3 | 0x8)
-//     return v.toString(16)
-//   })
-// }
-
 interface MemoAttachment {
   id: string
   type: "image" | "audio"
@@ -671,7 +662,7 @@ function MemoSessionApp() {
         updated_at: new Date().toISOString(),
       }
 
-      
+
 
       const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/session/${sessionId}/status`, {
         method: "PUT",

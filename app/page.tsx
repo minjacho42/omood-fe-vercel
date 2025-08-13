@@ -3,27 +3,45 @@
 import type React from "react"
 
 import { useEffect, useState, useRef, useMemo } from "react"
-import { Plus, Search, Edit3, BookOpen, ShoppingCart, Lightbulb, Briefcase, Heart, Mic, Calendar, Settings, LogOut, User, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Sparkles, BarChart3, Grid3X3, Clock, X, Camera, Pause, Play, Trash2, ZoomIn, Timer, CheckCircle, Coffee, TrendingUp, ArrowRight, AlertCircle } from 'lucide-react'
+import {
+  Plus,
+  Search,
+  Edit3,
+  BookOpen,
+  ShoppingCart,
+  Lightbulb,
+  Briefcase,
+  Heart,
+  Mic,
+  Calendar,
+  Settings,
+  LogOut,
+  User,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
+  BarChart3,
+  Grid3X3,
+  Clock,
+  X,
+  Camera,
+  Pause,
+  Play,
+  Trash2,
+  ZoomIn,
+  Timer,
+  CheckCircle,
+} from "lucide-react"
 import AuthGuard from "@/components/auth-guard"
 import CategoryManagement from "@/components/category-management"
 import { CircularTimer } from "@/components/circular-timer"
 import { SessionProgressCircle } from "@/components/session-progress-circle"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
 import { motion, useAnimation } from "framer-motion"
 import { useDrag } from "@use-gesture/react"
 import Draggable from "react-draggable"
-
-// UUID 생성 함수
-// const generateUUID = (): string => {
-//   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-//     const r = Math.random() * 16 | 0
-//     const v = c == 'x' ? r : (r & 0x3 | 0x8)
-//     return v.toString(16)
-//   })
-// }
 
 interface MemoAttachment {
   id: string
@@ -56,8 +74,7 @@ interface PomodoroSession {
   started_at?: Date
   created_at: Date
   updated_at: Date
-  status: 'pending' | 'started' | 'paused' | 'completed' | 'cancelled'
-  completed: boolean
+  status: "pending" | "started" | "paused" | "completed" | "cancelled" | "reviewed"
   reflection?: string
 }
 
@@ -261,15 +278,33 @@ const ImageModal: React.FC<{
   )
 }
 
-
 interface SessionCardProps {
-  session: PomodoroSession;
-  locale: string;
-  timeZone: string;
-  sessionReflections: { [sessionId: string]: string };
-  setSessionReflections: React.Dispatch<React.SetStateAction<{ [sessionId: string]: string }>>;
-  handleReflectionSubmit: (sessionId: string) => Promise<void>;
-  deleteSessionFromBackend: (sessionId: string) => Promise<void>;
+  session: PomodoroSession
+  locale: string
+  timeZone: string
+  sessionReflections: { [sessionId: string]: string }
+  setSessionReflections: React.Dispatch<React.SetStateAction<{ [sessionId: string]: string }>>
+  handleReflectionSubmit: (sessionId: string) => Promise<void>
+  deleteSessionFromBackend: (sessionId: string) => Promise<void>
+}
+
+interface CircularTimerProps {
+  duration: number
+  timeLeft: number
+  isRunning: boolean
+  isBreak: boolean
+  onToggle: () => void
+  onReset: () => void
+  onCancel?: () => void
+  sessionTitle?: string
+  sessionGoal?: string
+  sessionTags?: string[]
+  sessionStartTime?: Date
+  onStartSession: (sessionData: { subject: string; goal: string; duration: number; tags: string[] }) => Promise<void>
+  onDurationChange?: (newDuration: number) => void
+  currentSession?: {
+    status: "pending" | "started" | "paused" | "completed" | "cancelled"
+  }
 }
 
 const SessionCard: React.FC<SessionCardProps> = ({
@@ -279,163 +314,184 @@ const SessionCard: React.FC<SessionCardProps> = ({
   sessionReflections,
   setSessionReflections,
   handleReflectionSubmit,
-  deleteSessionFromBackend
+  deleteSessionFromBackend,
 }) => {
-    const controls = useAnimation();
-    const bgControls = useAnimation();
+  const controls = useAnimation()
+  const bgControls = useAnimation()
 
-    const bind = useDrag(({ down, movement: [mx], direction: [xDir], velocity: [vx] }) => {
-      const trigger = vx > 0.2; // If velocity is high, trigger action
-      const isSwipingLeft = xDir < 0;
+  const bind = useDrag(({ down, movement: [mx], direction: [xDir], velocity: [vx] }) => {
+    const trigger = vx > 0.2 // If velocity is high, trigger action
+    const isSwipingLeft = xDir < 0
 
-      if (!down && trigger && isSwipingLeft) {
-        controls.start({ x: -80 });
-        bgControls.start({ opacity: 1 });
-      } else if (!down) {
-        controls.start({ x: 0 });
-        bgControls.start({ opacity: 0 });
-      }
-    });
-
-    const handleDeleteClick = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        await deleteSessionFromBackend(session.id);
-    };
-
-    const utcCreated = typeof session.created_at === "string" ? new Date(session.created_at.endsWith("Z") ? session.created_at : session.created_at + "Z") : session.created_at
-    const time = utcCreated.toLocaleString(locale, {
-      timeZone,
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-
-    const getStatusColor = (status: string) => {
-      switch (status) {
-        case 'completed': return 'bg-green-400'
-        case 'started': return 'bg-blue-400'
-        case 'paused': return 'bg-yellow-400'
-        case 'cancelled': return 'bg-red-400'
-        default: return 'bg-gray-400'
-      }
+    if (!down && trigger && isSwipingLeft) {
+      controls.start({ x: -80 })
+      bgControls.start({ opacity: 1 })
+    } else if (!down) {
+      controls.start({ x: 0 })
+      bgControls.start({ opacity: 0 })
     }
+  })
 
-    const getStatusText = (status: string) => {
-      switch (status) {
-        case 'completed': return '완료'
-        case 'started': return '진행중'
-        case 'paused': return '일시정지'
-        case 'cancelled': return '취소됨'
-        case 'pending': return '대기중'
-        default: return status
-      }
+  const handleDeleteClick = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    await deleteSessionFromBackend(session.id)
+  }
+
+  const utcCreated =
+    typeof session.created_at === "string"
+      ? new Date(session.created_at.endsWith("Z") ? session.created_at : session.created_at + "Z")
+      : session.created_at
+  const time = utcCreated.toLocaleString(locale, {
+    timeZone,
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "bg-green-400"
+      case "started":
+        return "bg-blue-400"
+      case "paused":
+        return "bg-yellow-400"
+      case "cancelled":
+        return "bg-red-400"
+      case "reviewed":
+        return "bg-purple-400"
+      default:
+        return "bg-gray-400"
     }
+  }
 
-    return (
-        <div key={session.id} className="relative overflow-hidden rounded-2xl">
-            <motion.div
-                animate={bgControls}
-                initial={{ opacity: 0 }}
-                className="absolute inset-y-0 right-0 w-24 bg-red-500 flex items-center justify-center"
-            >
-                <Button onClick={handleDeleteClick} className="bg-transparent hover:bg-red-600 p-4 rounded-full">
-                    <Trash2 className="w-6 h-6 text-white" />
-                </Button>
-            </motion.div>
-            <motion.div
-              {...bind()}
-              animate={controls}
-              drag="x"
-              dragConstraints={{ left: -200, right: 0 }}
-              dragElastic={0.2}
-              className="relative z-10 backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-5 hover:bg-white/15 transition-all duration-200"
-            >
-              {/* Header with timer icon and time */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
-                    <Timer className="w-4 h-4 text-purple-400" />
-                  </div>
-                  <div>
-                    <span className="text-sm font-medium text-white/90">포모도로 세션</span>
-                  </div>
-                </div>
-                <span className="text-xs text-white/60">{time}</span>
-              </div>
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "완료"
+      case "started":
+        return "진행중"
+      case "paused":
+        return "일시정지"
+      case "cancelled":
+        return "취소됨"
+      case "pending":
+        return "대기중"
+      case "reviewed":
+        return "회고완료"
+      default:
+        return status
+    }
+  }
 
-              {/* Session content */}
-              <div className="mb-4">
-                <h3 className="text-white font-semibold mb-2">{session.subject}</h3>
-                {session.goal && <p className="text-white/80 text-sm mb-3">{session.goal}</p>}
-
-                <div className="flex items-center gap-4 mb-3">
-                  <div className="flex items-center gap-2">
-                    <SessionProgressCircle duration={session.duration} size={32}/>
-                    <span className="text-white/70 text-sm">{session.duration}분</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${getStatusColor(session.status)}`} />
-                    <span className="text-white/70 text-sm">{getStatusText(session.status)}</span>
-                  </div>
-                </div>
-
-                {session.reflection && (
-                  <div className="text-sm text-white/70 bg-white/5 rounded-lg p-3 mb-3">
-                    <p><strong>회고:</strong> {session.reflection}</p>
-                  </div>
-                )}
-
-                {/* Reflection input for completed sessions without reflection */}
-                {session.completed && !session.reflection && (
-                  <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
-                    <div className="flex items-center gap-2 mb-2">
-                      <CheckCircle className="w-4 h-4 text-green-400" />
-                      <span className="text-sm font-medium text-white">회고 작성</span>
-                    </div>
-                    <textarea
-                      placeholder="이 세션에서 무엇을 완료했나요? 어떤 점이 좋았고 개선할 점은 무엇인가요?"
-                      value={sessionReflections[session.id] || ''}
-                      onChange={(e) => setSessionReflections(prev => ({
-                        ...prev,
-                        [session.id]: e.target.value
-                      }))}
-                      rows={3}
-                      className="w-full p-2 text-sm bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 resize-none mb-2"
-                    />
-                    <button
-                      onClick={() => handleReflectionSubmit(session.id)}
-                      disabled={!sessionReflections[session.id]?.trim()}
-                      className="w-full py-2 px-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:from-gray-500 disabled:to-gray-600 disabled:opacity-50 text-white text-sm rounded-lg transition-all"
-                    >
-                      회고 저장
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Tags */}
-              {session.tags && session.tags.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {session.tags.slice(0, 3).map((tag, idx) => (
-                    <span key={idx} className="text-xs px-3 py-1.5 rounded-full bg-white/15 text-white/80 font-medium">
-                      {tag}
-                    </span>
-                  ))}
-                  {session.tags.length > 3 && (
-                    <span className="text-xs px-3 py-1.5 rounded-full bg-white/10 text-white/60">
-                      +{session.tags.length - 3}
-                    </span>
-                  )}
-                </div>
-              )}
-            </motion.div>
+  return (
+    <div key={session.id} className="relative overflow-hidden rounded-2xl">
+      <motion.div
+        animate={bgControls}
+        initial={{ opacity: 0 }}
+        className="absolute inset-y-0 right-0 w-24 bg-red-500 flex items-center justify-center"
+      >
+        <Button onClick={handleDeleteClick} className="bg-transparent hover:bg-red-600 p-4 rounded-full">
+          <Trash2 className="w-6 h-6 text-white" />
+        </Button>
+      </motion.div>
+      <motion.div
+        {...bind()}
+        animate={controls}
+        drag="x"
+        dragConstraints={{ left: -200, right: 0 }}
+        dragElastic={0.2}
+        className="relative z-10 backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-5 hover:bg-white/15 transition-all duration-200"
+      >
+        {/* Header with timer icon and time */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+              <Timer className="w-4 h-4 text-purple-400" />
+            </div>
+            <div>
+              <span className="text-sm font-medium text-white/90">포모도로 세션</span>
+            </div>
+          </div>
+          <span className="text-xs text-white/60">{time}</span>
         </div>
-    )
+
+        {/* Session content */}
+        <div className="mb-4">
+          <h3 className="text-white font-semibold mb-2">{session.subject}</h3>
+          {session.goal && <p className="text-white/80 text-sm mb-3">{session.goal}</p>}
+
+          <div className="flex items-center gap-4 mb-3">
+            <div className="flex items-center gap-2">
+              <SessionProgressCircle duration={session.duration} size={32} />
+              <span className="text-white/70 text-sm">{session.duration}분</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className={`w-3 h-3 rounded-full ${getStatusColor(session.status)}`} />
+              <span className="text-white/70 text-sm">{getStatusText(session.status)}</span>
+            </div>
+          </div>
+
+          {session.reflection && (
+            <div className="text-sm text-white/70 bg-white/5 rounded-lg p-3 mb-3">
+              <p>
+                <strong>회고:</strong> {session.reflection}
+              </p>
+            </div>
+          )}
+
+          {/* Reflection input for completed sessions without reflection */}
+          {session.status === "completed" && !session.reflection && (
+            <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle className="w-4 h-4 text-green-400" />
+                <span className="text-sm font-medium text-white">회고 작성</span>
+              </div>
+              <textarea
+                placeholder="이 세션에서 무엇을 완료했나요? 어떤 점이 좋았고 개선할 점은 무엇인가요?"
+                value={sessionReflections[session.id] || ""}
+                onChange={(e) =>
+                  setSessionReflections((prev) => ({
+                    ...prev,
+                    [session.id]: e.target.value,
+                  }))
+                }
+                rows={3}
+                className="w-full p-2 text-sm bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 resize-none mb-2"
+              />
+              <button
+                onClick={() => handleReflectionSubmit(session.id)}
+                disabled={!sessionReflections[session.id]?.trim()}
+                className="w-full py-2 px-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:from-gray-500 disabled:to-gray-600 disabled:opacity-50 text-white text-sm rounded-lg transition-all"
+              >
+                회고 저장
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Tags */}
+        {session.tags && session.tags.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {session.tags.slice(0, 3).map((tag, idx) => (
+              <span key={idx} className="text-xs px-3 py-1.5 rounded-full bg-white/15 text-white/80 font-medium">
+                {tag}
+              </span>
+            ))}
+            {session.tags.length > 3 && (
+              <span className="text-xs px-3 py-1.5 rounded-full bg-white/10 text-white/60">
+                +{session.tags.length - 3}
+              </span>
+            )}
+          </div>
+        )}
+      </motion.div>
+    </div>
+  )
 }
 
 function MemoSessionApp() {
-
   // App mode state
   const [appMode, setAppMode] = useState<AppMode>("session")
 
@@ -509,7 +565,9 @@ function MemoSessionApp() {
 
   // Session weekly/monthly data
   const [weeklySessionData, setWeeklySessionData] = useState<{ [key: string]: PomodoroSession[] }>({})
-  const [monthlySessionData, setMonthlySessionData] = useState<{ [key: string]: { session_count: number; total_focus_time: number } }>({})
+  const [monthlySessionData, setMonthlySessionData] = useState<{
+    [key: string]: { session_count: number; total_focus_time: number }
+  }>({})
 
   // Browser locale for date formatting
   const locale = typeof navigator !== "undefined" ? navigator.language : "en-US"
@@ -540,6 +598,7 @@ function MemoSessionApp() {
   const [timeLeft, setTimeLeft] = useState(0)
   const [isRunning, setIsRunning] = useState(false)
   const [sessions, setSessions] = useState<PomodoroSession[]>([])
+  const [breakStartedAt, setBreakStartedAt] = useState<Date | null>(null)
 
   // Session reflection states
   const [sessionReflections, setSessionReflections] = useState<{ [sessionId: string]: string }>({})
@@ -637,10 +696,9 @@ function MemoSessionApp() {
         break_duration: session.break_duration,
         tags: session.tags,
         status: session.status,
-        completed: session.completed,
         created_at: session.created_at,
         // user_id is handled by the backend based on the session/cookie
-      };
+      }
 
       const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/session`, {
         method: "POST",
@@ -649,17 +707,17 @@ function MemoSessionApp() {
       })
 
       if (res && res.ok) {
-        const newSessionData = await res.json();
-        console.log("Session created in backend");
-        await fetchSessionData();
-        return newSessionData; // Return the created session data
+        const newSessionData = await res.json()
+        console.log("Session created in backend")
+        await fetchSessionData()
+        return newSessionData // Return the created session data
       } else {
-        console.error("Failed to create session in backend");
-        return null;
+        console.error("Failed to create session in backend")
+        return null
       }
     } catch (err) {
-      console.error("Error creating session in backend:", err);
-      return null;
+      console.error("Error creating session in backend:", err)
+      return null
     }
   }
 
@@ -668,11 +726,6 @@ function MemoSessionApp() {
       const updateData: any = {
         status,
         updated_at: new Date().toISOString(),
-      }
-
-      // If marking as completed, also set completed flag
-      if (status === 'completed') {
-        updateData.completed = true
       }
 
       const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/session/${sessionId}/status`, {
@@ -718,6 +771,7 @@ function MemoSessionApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reflection: reflection,
+          status: "reviewed",
           updated_at: new Date().toISOString(),
         }),
       })
@@ -731,6 +785,42 @@ function MemoSessionApp() {
       }
     } catch (err) {
       console.error("Error updating session reflection:", err)
+    }
+  }
+
+  const updateSessionDuration = async (sessionId: string, newDuration: number) => {
+    try {
+      const res = await apiCall(`${process.env.NEXT_PUBLIC_API_BASE_URL}/session/${sessionId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          duration: newDuration,
+          break_duration: getBreakDuration(newDuration),
+          updated_at: new Date().toISOString(),
+        }),
+      })
+
+      if (res && res.ok) {
+        console.log("Session duration updated")
+        // 현재 세션 상태 업데이트
+        setCurrentSession((prev) =>
+          prev
+            ? {
+                ...prev,
+                duration: newDuration,
+                break_duration: getBreakDuration(newDuration),
+                updated_at: new Date(),
+              }
+            : null,
+        )
+        // 새로운 duration으로 timeLeft 재설정
+        setTimeLeft(newDuration * 60)
+        await fetchSessionData()
+      } else {
+        console.error("Failed to update session duration")
+      }
+    } catch (err) {
+      console.error("Error updating session duration:", err)
     }
   }
 
@@ -757,43 +847,52 @@ function MemoSessionApp() {
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null
 
-    if (isRunning && timeLeft > 0 && currentSession) {
+    if (isRunning) {
       interval = setInterval(() => {
-        setTimeLeft(prev => prev - 1)
-      }, 1000)
-    } else if (timeLeft === 0 && isRunning && currentSession) {
-      setIsRunning(false)
-      if (currentPhase === "focus") {
-        // Focus time completed, mark session as completed and start break
-        const completedSession = {
-          ...currentSession,
-          status: 'completed' as const,
-          completed: true,
-          updated_at: new Date()
+        if (currentPhase === "focus" && currentSession?.status === "started" && currentSession.started_at) {
+          const now = Date.now()
+          const started = new Date(currentSession.started_at).getTime()
+          const elapsed = Math.floor((now - started) / 1000)
+          const newTimeLeft = Math.max(0, currentSession.duration * 60 - elapsed)
+          setTimeLeft(newTimeLeft)
+        } else if (currentPhase === "break" && currentSession && breakStartedAt) {
+          const now = Date.now()
+          const started = breakStartedAt.getTime()
+          const elapsed = Math.floor((now - started) / 1000)
+          const newTimeLeft = Math.max(0, currentSession.break_duration * 60 - elapsed)
+          setTimeLeft(newTimeLeft)
         }
-        setCurrentSession(completedSession)
-
-        // Update session status in backend
-        updateSessionStatus(currentSession.id, 'completed')
-
-        // Refresh sessions to get updated data
-        fetchSessionData()
-
-        setCurrentPhase("break")
-        setTimeLeft(currentSession.break_duration * 60)
-        setIsRunning(true)
-      } else if (currentPhase === "break") {
-        // Break completed, reset to setup
-        setCurrentPhase("setup")
-        setCurrentSession(null)
-        setTimeLeft(0)
-      }
+      }, 1000)
     }
 
     return () => {
       if (interval) clearInterval(interval)
     }
-  }, [isRunning, timeLeft, currentPhase, currentSession])
+  }, [isRunning, currentSession, currentPhase, breakStartedAt])
+
+  useEffect(() => {
+    if (timeLeft < 1 && isRunning && currentSession) {
+      setIsRunning(false)
+      if (currentPhase === "focus") {
+        const completedSession = {
+          ...currentSession,
+          status: "completed" as const,
+          updated_at: new Date(),
+        }
+        setCurrentSession(completedSession)
+        updateSessionStatus(currentSession.id, "completed")
+        fetchSessionData()
+        setCurrentPhase("break")
+        setTimeLeft(currentSession.break_duration * 60)
+        setBreakStartedAt(new Date())
+        setIsRunning(true)
+      } else if (currentPhase === "break") {
+        setCurrentPhase("setup")
+        setCurrentSession(null)
+        setTimeLeft(0)
+      }
+    }
+  }, [timeLeft, isRunning, currentSession, currentPhase])
 
   useEffect(() => {
     let ticking = false
@@ -821,39 +920,39 @@ function MemoSessionApp() {
 
   useEffect(() => {
     if (appMode === "session" && ["focus", "setup"].includes(currentPhase)) {
-      fetchCurrentSession();
+      fetchCurrentSession()
     }
-  }, [appMode, viewMode, currentDate, timeZone]);
+  }, [appMode, viewMode, currentDate, timeZone])
 
   useEffect(() => {
     if (appMode === "session" && ["focus", "setup"].includes(currentPhase)) {
       if (currentSession) {
         // 타이머 초기화/세팅
         if (["started", "paused"].includes(currentSession.status) && currentSession.started_at) {
-          const now = Date.now();
-          const started = new Date(currentSession.started_at).getTime();
-          const updated = new Date(currentSession.updated_at).getTime();
-          let elapsed = 0;
+          const now = Date.now()
+          const started = new Date(currentSession.started_at).getTime()
+          const updated = new Date(currentSession.updated_at).getTime()
+          let elapsed = 0
           if (currentSession.status === "paused") {
-            elapsed = Math.floor((updated - started) / 1000); // 초 단위
+            elapsed = Math.floor((updated - started) / 1000) // 초 단위
           } else if (currentSession.status === "started") {
-            elapsed = Math.floor((now - started) / 1000); // 초 단위
+            elapsed = Math.floor((now - started) / 1000) // 초 단위
           }
-          const remaining = Math.max(0, currentSession.duration * 60 - elapsed);
-          setTimeLeft(remaining);
-          setIsRunning(currentSession.status === "started");
+          const remaining = Math.max(0, currentSession.duration * 60 - elapsed)
+          setTimeLeft(remaining)
+          setIsRunning(currentSession.status === "started")
         } else {
-          setTimeLeft(currentSession?.duration ? currentSession.duration * 60 : 0);
-          setIsRunning(false);
+          setTimeLeft(currentSession?.duration ? currentSession.duration * 60 : 0)
+          setIsRunning(false)
         }
-        setCurrentPhase("focus");
+        setCurrentPhase("focus")
       } else {
-        setTimeLeft(0);
-        setIsRunning(false);
-        setCurrentPhase("setup");
+        setTimeLeft(0)
+        setIsRunning(false)
+        setCurrentPhase("setup")
       }
     }
-  }, [currentSession, viewMode, appMode]);
+  }, [currentSession, viewMode, appMode])
 
   const fetchData = async () => {
     try {
@@ -887,28 +986,32 @@ function MemoSessionApp() {
   function parseSession(session: any): PomodoroSession {
     return {
       ...session,
-      started_at: session.started_at ? new Date(session.started_at?.endsWith?.("Z") ? session.started_at : session.started_at + "Z") : undefined,
+      started_at: session.started_at
+        ? new Date(session.started_at?.endsWith?.("Z") ? session.started_at : session.started_at + "Z")
+        : undefined,
       created_at: new Date(session.created_at?.endsWith?.("Z") ? session.created_at : session.created_at + "Z"),
-      updated_at: session.updated_at ? new Date(session.updated_at?.endsWith?.("Z") ? session.updated_at : session.updated_at + "Z") : undefined,
+      updated_at: session.updated_at
+        ? new Date(session.updated_at?.endsWith?.("Z") ? session.updated_at : session.updated_at + "Z")
+        : undefined,
     }
   }
 
   // 2. fetch 함수 추가
   const fetchCurrentSession = async () => {
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/session/current`;
-      const res = await apiCall(url);
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/session/current`
+      const res = await apiCall(url)
       if (res && res.ok) {
-        const data = await res.json();
-        setCurrentSession(parseSession(data));
+        const data = await res.json()
+        setCurrentSession(parseSession(data))
       } else {
-        setCurrentSession(null); // 404 처리 시에도 null
+        setCurrentSession(null) // 404 처리 시에도 null
       }
     } catch (err) {
-      setCurrentSession(null);
-      console.error("Error fetching current session:", err);
+      setCurrentSession(null)
+      console.error("Error fetching current session:", err)
     }
-  };
+  }
 
   // 1. 일간 세션 데이터
   const fetchDailySessionData = async () => {
@@ -982,7 +1085,7 @@ function MemoSessionApp() {
             groupedData[localSessionDate] = { session_count: 0, total_focus_time: 0 }
           }
           groupedData[localSessionDate].session_count++
-          if (session.completed) {
+          if (session.status === "completed") {
             groupedData[localSessionDate].total_focus_time += session.duration
           }
         })
@@ -1106,7 +1209,6 @@ function MemoSessionApp() {
       setDailySummary(null)
     }
   }
-
 
   const createNewCategory = async (name: string, isForEdit = false) => {
     if (!name.trim()) return
@@ -1245,8 +1347,8 @@ function MemoSessionApp() {
     const breakDuration = getBreakDuration(sessionData.duration)
 
     const newSession: PomodoroSession = {
-      id: '', // Will be set by backend
-      user_id: user?.email || '',
+      id: "", // Will be set by backend
+      user_id: user?.email || "",
       subject: sessionData.subject,
       goal: sessionData.goal,
       duration: sessionData.duration,
@@ -1254,22 +1356,21 @@ function MemoSessionApp() {
       tags: sessionData.tags,
       created_at: new Date(),
       updated_at: new Date(),
-      status: 'pending',
-      completed: false
+      status: "pending",
     }
 
-    const createdSession = await createSessionInBackend(newSession);
+    const createdSession = await createSessionInBackend(newSession)
     if (createdSession) {
-        const convertedSession = {
-            ...createdSession,
-            started_at: createdSession.started_at ? new Date(createdSession.started_at) : undefined,
-            created_at: new Date(createdSession.created_at),
-            updated_at: createdSession.updated_at ? new Date(createdSession.updated_at) : new Date(),
-        };
-        setCurrentSession(convertedSession);
-        setTimeLeft(convertedSession.duration * 60);
-        setCurrentPhase("focus");
-        setIsRunning(false);
+      const convertedSession = {
+        ...createdSession,
+        started_at: createdSession.started_at ? new Date(createdSession.started_at) : undefined,
+        created_at: new Date(createdSession.created_at),
+        updated_at: createdSession.updated_at ? new Date(createdSession.updated_at) : new Date(),
+      }
+      setCurrentSession(convertedSession)
+      setTimeLeft(convertedSession.duration * 60)
+      setCurrentPhase("focus")
+      setIsRunning(false)
     }
   }
 
@@ -1277,41 +1378,42 @@ function MemoSessionApp() {
     if (!currentSession) return
 
     const newRunningState = !isRunning
-    setIsRunning(newRunningState)
 
     if (newRunningState) {
-      // Starting timer
-      const newStatus = currentSession.status === 'pending' ? 'started' : 'started'
-      await updateSessionStatus(currentSession.id, newStatus)
+      // Start or Resume
+      const now = new Date()
+      const updatedSession = { ...currentSession, status: "started" as const, updated_at: now }
 
-      // Update started_at if this is the first start
-      if (currentSession.status === 'pending') {
-        setCurrentSession(prev => prev ? {
-          ...prev,
-          status: 'started',
-          started_at: new Date(),
-          updated_at: new Date()
-        } : null)
+      if (currentSession.status === "paused" && currentSession.updated_at && currentSession.started_at) {
+        const pauseDuration = now.getTime() - new Date(currentSession.updated_at).getTime()
+        updatedSession.started_at = new Date(new Date(currentSession.started_at).getTime() + pauseDuration)
+      } else if (currentSession.status === "pending") {
+        updatedSession.started_at = now
       }
+
+      await updateSessionStatus(currentSession.id, "started")
+      setCurrentSession(updatedSession)
     } else {
-      // Pausing timer
-      await updateSessionStatus(currentSession.id, 'paused')
-      setCurrentSession(prev => prev ? {
-        ...prev,
-        status: 'paused',
-        updated_at: new Date()
-      } : null)
+      // Pause
+      await updateSessionStatus(currentSession.id, "paused")
+      setCurrentSession((prev) => (prev ? { ...prev, status: "paused" as const, updated_at: new Date() } : null))
     }
+
+    setIsRunning(newRunningState)
   }
 
   const resetTimer = async () => {
     if (currentSession) {
-      await updateSessionStatus(currentSession.id, 'pending')
-      setCurrentSession(prev => prev ? {
-        ...prev,
-        status: 'pending',
-        updated_at: new Date()
-      } : null)
+      await updateSessionStatus(currentSession.id, "pending")
+      setCurrentSession((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "pending",
+              updated_at: new Date(),
+            }
+          : null,
+      )
     }
     setIsRunning(false)
     if (currentSession) {
@@ -1325,8 +1427,8 @@ function MemoSessionApp() {
 
   const cancelCurrentTask = async () => {
     if (currentSession) {
-      // Update session status to cancelled
-      await updateSessionStatus(currentSession.id, 'cancelled')
+      // delete session
+      await deleteSessionFromBackend(currentSession.id)
     }
 
     setIsRunning(false)
@@ -1342,7 +1444,7 @@ function MemoSessionApp() {
     await updateSessionReflection(sessionId, reflection.trim())
 
     // Clear the reflection input
-    setSessionReflections(prev => {
+    setSessionReflections((prev) => {
       const newReflections = { ...prev }
       delete newReflections[sessionId]
       return newReflections
@@ -1585,16 +1687,14 @@ function MemoSessionApp() {
   // Session statistics functions
   const getTodayStats = () => {
     const today = formatLocalDate(currentDate)
-    const todaySessions = sessions.filter(session =>
-      formatLocalDate(new Date(session.created_at)) === today
-    )
-    const completedSessions = todaySessions.filter(s => s.completed)
+    const todaySessions = sessions.filter((session) => formatLocalDate(new Date(session.created_at)) === today)
+    const completedSessions = todaySessions.filter((s) => s.status === "completed")
 
     return {
       totalFocusTime: completedSessions.reduce((acc, session) => acc + session.duration, 0),
       sessionsCompleted: completedSessions.length,
       totalSessions: todaySessions.length,
-      sessions: todaySessions
+      sessions: todaySessions,
     }
   }
 
@@ -1604,17 +1704,17 @@ function MemoSessionApp() {
     const endOfWeek = new Date(startOfWeek)
     endOfWeek.setDate(startOfWeek.getDate() + 6)
 
-    const weekSessions = sessions.filter(session => {
+    const weekSessions = sessions.filter((session) => {
       const sessionDate = new Date(session.created_at)
       return sessionDate >= startOfWeek && sessionDate <= endOfWeek
     })
-    const completedSessions = weekSessions.filter(s => s.completed)
+    const completedSessions = weekSessions.filter((s) => s.status === "completed")
 
     return {
       totalFocusTime: completedSessions.reduce((acc, session) => acc + session.duration, 0),
       sessionsCompleted: completedSessions.length,
       totalSessions: weekSessions.length,
-      sessions: weekSessions
+      sessions: weekSessions,
     }
   }
 
@@ -1624,17 +1724,17 @@ function MemoSessionApp() {
     const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
 
-    const monthSessions = sessions.filter(session => {
+    const monthSessions = sessions.filter((session) => {
       const sessionDate = new Date(session.created_at)
       return sessionDate >= firstDay && sessionDate <= lastDay
     })
-    const completedSessions = monthSessions.filter(s => s.completed)
+    const completedSessions = monthSessions.filter((s) => s.status === "completed")
 
     return {
       totalFocusTime: completedSessions.reduce((acc, session) => acc + session.duration, 0),
       sessionsCompleted: completedSessions.length,
       totalSessions: monthSessions.length,
-      sessions: monthSessions
+      sessions: monthSessions,
     }
   }
 
@@ -1773,7 +1873,9 @@ function MemoSessionApp() {
             <div className="text-white/60 text-sm">완료된 세션</div>
           </div>
           <div className="text-center p-3 rounded-xl bg-white/5">
-            <div className="text-2xl font-bold text-white mb-1">{todayStats.totalSessions - todayStats.sessionsCompleted}개</div>
+            <div className="text-2xl font-bold text-white mb-1">
+              {todayStats.totalSessions - todayStats.sessionsCompleted}개
+            </div>
             <div className="text-white/60 text-sm">진행중/중단</div>
           </div>
         </div>
@@ -1853,7 +1955,10 @@ function MemoSessionApp() {
 
   const renderMemoCard = (memo: Memo) => {
     const category = memo.category ? categories[memo.category] || CATEGORIES.uncategorized : null
-    const utcCreated = typeof memo.created_at === "string" ? new Date(memo.created_at.endsWith("Z") ? memo.created_at : memo.created_at + "Z") : memo.created_at
+    const utcCreated =
+      typeof memo.created_at === "string"
+        ? new Date(memo.created_at.endsWith("Z") ? memo.created_at : memo.created_at + "Z")
+        : memo.created_at
     const time = utcCreated.toLocaleString(locale, {
       timeZone,
       month: "short",
@@ -1973,8 +2078,6 @@ function MemoSessionApp() {
     )
   }
 
-
-
   const renderWeeklyView = () => {
     const startOfWeek = new Date(currentDate)
     startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
@@ -2047,7 +2150,10 @@ function MemoSessionApp() {
                         {Object.entries(categoryGroups).map(([categoryKey, count]) => {
                           const category = categories[categoryKey] || CATEGORIES.uncategorized
                           return (
-                            <div key={categoryKey} className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/10">
+                            <div
+                              key={categoryKey}
+                              className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/10"
+                            >
                               <div
                                 className="w-3 h-3 rounded-full flex items-center justify-center"
                                 style={{ backgroundColor: category.color }}
@@ -2067,7 +2173,7 @@ function MemoSessionApp() {
           } else {
             // Session mode
             const daySessions = weeklySessionData[dateStr] || []
-            const completedSessions = daySessions.filter(s => s.completed)
+            const completedSessions = daySessions.filter((s) => s.completed)
             const totalFocusTime = completedSessions.reduce((acc, session) => acc + session.duration, 0)
 
             return (
@@ -2092,10 +2198,15 @@ function MemoSessionApp() {
                   <div className="flex-1">
                     {daySessions.length > 0 ? (
                       <div>
-                        <p className="text-white/80 text-sm">{completedSessions.length}개 세션 완료 • {totalFocusTime}분 집중</p>
+                        <p className="text-white/80 text-sm">
+                          {completedSessions.length}개 세션 완료 • {totalFocusTime}분 집중
+                        </p>
                         <div className="flex gap-2 flex-wrap mt-2">
                           {daySessions.slice(0, 2).map((session) => (
-                            <div key={session.id} className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/10">
+                            <div
+                              key={session.id}
+                              className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/10"
+                            >
                               <Timer className="w-3 h-3 text-purple-400" />
                               <span className="text-xs text-white/70">{session.duration}분</span>
                             </div>
@@ -2237,9 +2348,7 @@ function MemoSessionApp() {
                       title={`${day.getDate()}일 - ${count}개 ${appMode === "memo" ? "메모" : "세션"}`}
                     >
                       <div className="font-medium">{day.getDate()}</div>
-                      {count > 0 && (
-                        <div className="text-xs text-white/80 mt-0.5">{count > 99 ? "99+" : count}</div>
-                      )}
+                      {count > 0 && <div className="text-xs text-white/80 mt-0.5">{count > 99 ? "99+" : count}</div>}
                     </div>
                   )
                 })}
@@ -2339,7 +2448,7 @@ function MemoSessionApp() {
                       if (!next) setSearchQuery("")
                     }}
                     className={`rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 transition-all ${
-                      isScrolled ? "w-8 h-8" : "w-10 h-10"
+                      isScrolled ? "w-8 h-8" : "w-10 h-"
                     }`}
                   >
                     <Search className={`${isScrolled ? "w-4 h-4" : "w-5 h-5"}`} />
@@ -2361,12 +2470,12 @@ function MemoSessionApp() {
               )}
 
               {appMode === "session" && (
-                  <button
-                    onClick={() => setShowSessionTimer((prev) => !prev)}
-                    className="ml-2 p-2 rounded-full bg-white/10 hover:bg-white/20 transition"
-                  >
-                    <Timer className="w-5 h-5 text-purple-400" />
-                  </button>
+                <button
+                  onClick={() => setShowSessionTimer((prev) => !prev)}
+                  className="ml-2 p-2 rounded-full bg-white/10 hover:bg-white/20 transition"
+                >
+                  <Timer className="w-5 h-5 text-purple-400" />
+                </button>
               )}
 
               <div className="relative">
@@ -2497,7 +2606,9 @@ function MemoSessionApp() {
                         key={key}
                         onClick={() => setCategoryFilter(key)}
                         className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
-                          categoryFilter === key ? "bg-white/20 text-white" : "bg-white/5 text-white/70 hover:bg-white/10"
+                          categoryFilter === key
+                            ? "bg-white/20 text-white"
+                            : "bg-white/5 text-white/70 hover:bg-white/10"
                         }`}
                       >
                         {config.icon}
@@ -2512,55 +2623,61 @@ function MemoSessionApp() {
         </div>
 
         {/* Content */}
-     {showSessionTimer && (
-       <>
-         {/* Overlay to close on outside click */}
-         <div
-           className="fixed inset-0 z-40"
-           onMouseDown={() => setShowSessionTimer(false)}
-           onTouchStart={() => setShowSessionTimer(false)}
-         />
-             <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+        {showSessionTimer && (
+          <>
+            {/* Overlay to close on outside click */}
+            <div
+              className="fixed inset-0 z-40"
+              onMouseDown={() => setShowSessionTimer(false)}
+              onTouchStart={() => setShowSessionTimer(false)}
+            />
+            <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+              <Draggable
+                nodeRef={timerRef}
+                enableUserSelectHack={false}
+                cancel="button, input, textarea, select, option, .circular-timer"
+                //  defaultPosition={{ x: 0, y: 0 }}
+              >
+                <div
+                  ref={timerRef}
+                  className="relative bg-black/90 backdrop-blur-md border border-white/20 p-4 rounded-xl shadow-lg cursor-grab pointer-events-auto"
+                  style={{ touchAction: "none" }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => {
+                    e.stopPropagation()
+                  }}
+                >
+                  {/* Drag handle */}
+                  <div className="drag-handle mx-auto mb-2 w-12 h-1 bg-white/50 rounded cursor-move" />
 
-         <Draggable
-           nodeRef={timerRef}
-           enableUserSelectHack={false}
-           cancel="button, input, textarea, select, option, .circular-timer"
-          //  defaultPosition={{ x: 0, y: 0 }}
-         >
-           <div
-             ref={timerRef}
-            className="relative bg-black/100 p-4 rounded-xl shadow-lg cursor-grab pointer-events-auto"
-
-             style={{ touchAction: "none" }}
-             onMouseDown={(e) => e.stopPropagation()}
-             onTouchStart={(e) => { e.stopPropagation(); }}
-           >
-             {/* Drag handle */}
-             <div className="drag-handle mx-auto mb-2 w-12 h-1 bg-gray-300 rounded cursor-move" />
-
-             {/* Timer content */}
-             <div className="circular-timer">
-               <CircularTimer
-                 duration={currentSession?.duration || 25}
-                 timeLeft={timeLeft}
-                 isRunning={isRunning}
-                 isBreak={currentPhase === "break"}
-                 onToggle={toggleTimer}
-                 onReset={resetTimer}
-                 onCancel={currentPhase !== "setup" ? cancelCurrentTask : undefined}
-                 sessionTitle={currentSession?.subject}
-                 sessionGoal={currentSession?.goal}
-                 sessionTags={currentSession?.tags}
-                 sessionStartTime={currentSession?.started_at}
-                 onStartSession={startSession}
-               />
-             </div>
-           </div>
-         </Draggable>
-          </div>
-       </>
-     )}
+                  {/* Timer content */}
+                  <div className="circular-timer">
+                    <CircularTimer
+                      duration={currentSession?.duration || 25}
+                      timeLeft={timeLeft}
+                      isRunning={isRunning}
+                      isBreak={currentPhase === "break"}
+                      onToggle={toggleTimer}
+                      onReset={resetTimer}
+                      onCancel={currentPhase !== "setup" ? cancelCurrentTask : undefined}
+                      sessionTitle={currentSession?.subject}
+                      sessionGoal={currentSession?.goal}
+                      sessionTags={currentSession?.tags}
+                      sessionStartTime={currentSession?.started_at}
+                      onStartSession={startSession}
+                      onDurationChange={
+                        currentSession && currentSession.status === "pending"
+                          ? (newDuration: number) => updateSessionDuration(currentSession.id, newDuration)
+                          : undefined
+                      }
+                      currentSession={currentSession}
+                    />
+                  </div>
+                </div>
+              </Draggable>
+            </div>
+          </>
+        )}
         <div className="p-4 pb-32">
           {appMode === "memo" ? (
             <>
@@ -2594,25 +2711,27 @@ function MemoSessionApp() {
                   {/* Daily Sessions List */}
                   {(() => {
                     const today = formatLocalDate(currentDate)
-                    const todaySessions = sessions.filter(session =>
-                      formatLocalDate(new Date(session.created_at)) === today
+                    const todaySessions = sessions.filter(
+                      (session) => formatLocalDate(new Date(session.created_at)) === today,
                     )
 
-                    return todaySessions.length > 0 && (
-                      <div className="space-y-4">
-                        {todaySessions.map(session => (
-                        <SessionCard
-                          key={session.id}
-                          session={session}
-                          timeZone={timeZone}
-                          locale={locale}
-                          sessionReflections={sessionReflections}
-                          setSessionReflections={setSessionReflections}
-                          handleReflectionSubmit={handleReflectionSubmit}
-                          deleteSessionFromBackend={deleteSessionFromBackend}
-                        />
-                      ))}
-                      </div>
+                    return (
+                      todaySessions.length > 0 && (
+                        <div className="space-y-4">
+                          {todaySessions.map((session) => (
+                            <SessionCard
+                              key={session.id}
+                              session={session}
+                              timeZone={timeZone}
+                              locale={locale}
+                              sessionReflections={sessionReflections}
+                              setSessionReflections={setSessionReflections}
+                              handleReflectionSubmit={handleReflectionSubmit}
+                              deleteSessionFromBackend={deleteSessionFromBackend}
+                            />
+                          ))}
+                        </div>
+                      )
                     )
                   })()}
                 </>
@@ -3138,7 +3257,7 @@ function MemoSessionApp() {
                     <button
                       onClick={isRecording ? stopRecording : startRecording}
                       className={`flex-1 py-3 rounded-xl border text-white hover:bg-white/15 transition-all flex items-center justify-center gap-2 ${
-                    isRecording ? "bg-red-500/20 border-red-500/30" : "bg-white/10 border-white/20"
+                        isRecording ? "bg-red-500/20 border-red-500/30" : "bg-white/10 border-white/20"
                       }`}
                     >
                       <Mic className="w-4 h-4" />

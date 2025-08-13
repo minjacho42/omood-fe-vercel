@@ -314,10 +314,20 @@ export function CircularTimer({
           {/* Session Title or New Session Button */}
 
           {/* Digital Time Display */}
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10">
+          <div className="mx-auto mb-4">
             <div className="backdrop-blur-md bg-black/30 border border-white/20 rounded-xl px-6 py-3 shadow-lg min-w-[200px]">
               <div className="text-center">
-                {sessionTitle && <div className="text-sm font-bold text-white mb-1 truncate">{sessionTitle}</div>}
+                {sessionTitle && (
+                  <button
+                    type="button"
+                    onClick={handleSessionTitleClick}
+                    className="text-sm font-bold text-white mb-1 truncate cursor-pointer hover:underline focus:outline-none focus:ring-2 focus:ring-white/40 rounded"
+                    aria-label="세션 세부 정보 열기"
+                    title={sessionTitle}
+                  >
+                    {sessionTitle}
+                  </button>
+                )}
                 <div className="text-2xl font-mono font-bold text-white">
                   {effectiveSettingMode ? `${localDuration}분` : formatTime(timeLeft)}
                 </div>
@@ -367,7 +377,7 @@ export function CircularTimer({
           </div>
 
           {/* Timer Face */}
-          <div className="relative w-full h-full flex items-center justify-center py-8">
+          <div className="relative w-full h-full flex items-center justify-center">
             <svg
               ref={svgRef}
               width="300"
@@ -521,7 +531,6 @@ export function CircularTimer({
             <div className="p-4">
               {/* Modal Header */}
               <div className="flex items-center justify-between mb-4">
-                {/* <h2 className="text-2xl font-bold text-white">🍅 새 세션 설정</h2> */}
                 <button
                   onClick={() => setShowSessionModal(false)}
                   className="p-2 hover:bg-white/10 rounded-full transition-colors"
@@ -529,15 +538,6 @@ export function CircularTimer({
                   <X className="w-5 h-5 text-white" />
                 </button>
               </div>
-
-              {/* Current Timer Setting Display */}
-              {/* <div className="mb-6 p-4 bg-white/10 border border-white/20 rounded-xl text-center">
-                <div className="text-sm text-white/70 mb-1">설정된 시간</div>
-                <div className="text-3xl font-bold text-white mb-1">{localDuration}분</div>
-                <div className="text-xs text-white/60 mt-1">타이머를 드래그해서 조정하세요</div>
-              </div> */}
-
-              {/* Subject Input */}
               <div className="mb-4">
                 <Label htmlFor="subject" className="text-base font-semibold text-white">
                   주제

@@ -1688,7 +1688,7 @@ function MemoSessionApp() {
   const getTodayStats = () => {
     const today = formatLocalDate(currentDate)
     const todaySessions = sessions.filter((session) => formatLocalDate(new Date(session.created_at)) === today)
-    const completedSessions = todaySessions.filter((s) => s.status === "completed")
+    const completedSessions = todaySessions.filter((s) => s.status === "completed" || s.status === "reviewed")
 
     return {
       totalFocusTime: completedSessions.reduce((acc, session) => acc + session.duration, 0),
@@ -1708,7 +1708,7 @@ function MemoSessionApp() {
       const sessionDate = new Date(session.created_at)
       return sessionDate >= startOfWeek && sessionDate <= endOfWeek
     })
-    const completedSessions = weekSessions.filter((s) => s.status === "completed")
+    const completedSessions = weekSessions.filter((s) => s.status === "completed" || s.status === "reviewed")
 
     return {
       totalFocusTime: completedSessions.reduce((acc, session) => acc + session.duration, 0),
@@ -1728,7 +1728,7 @@ function MemoSessionApp() {
       const sessionDate = new Date(session.created_at)
       return sessionDate >= firstDay && sessionDate <= lastDay
     })
-    const completedSessions = monthSessions.filter((s) => s.status === "completed")
+    const completedSessions = monthSessions.filter((s) => s.status === "completed" || s.status === "reviewed")
 
     return {
       totalFocusTime: completedSessions.reduce((acc, session) => acc + session.duration, 0),

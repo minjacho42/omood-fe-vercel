@@ -1,0 +1,24 @@
+
+  <svg
+    width="40"
+    height="40"
+    viewBox="0 0 64 64"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-label="Tomato Logo"
+  >
+    {/* 몸통: 가로로 통통한 타원 */}
+    <ellipse cx="32" cy="36" rx="20" ry="15" fill="#EF4444" stroke="#991B1B" strokeWidth="2" />
+    {/* 하이라이트(광택) */}
+    <ellipse cx="24" cy="30" rx="4.5" ry="3" fill="white" opacity="0.35" transform="rotate(-20 24 30)" />
+
+    {/* 잎/줄기 */}
+    <path d="M32 18 C30 15, 27 13, 24 14 C26 16, 27 18, 26 20 C28 19, 30 19, 32 20 C34 19, 36 19, 38 20 C37 18, 38 16, 40 14 C37 13, 34 15, 32 18 Z"
+      fill="#22C55E" stroke="#166534" strokeWidth="1.5" />
+    <path d="M32 20 C32 17, 32 15, 33 13" stroke="#166534" strokeWidth="1.5" strokeLinecap="round"/>
+
+    {/* 얼굴 */}
+    <circle cx="27" cy="40" r="2" fill="#000000b0"/>
+    <circle cx="37" cy="40" r="2" fill="#000000b0"/>
+    <path d="M28 46 Q32 49.5 36 46" stroke="#000000b0" strokeWidth="2" fill="none" strokeLinecap="round"/>
+  </svg>
